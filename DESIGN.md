@@ -1,4 +1,4 @@
-# DocExtract — High-Level Design
+# DocEx — High-Level Design
 
 ## 1. System Architecture
 

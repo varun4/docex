@@ -1,4 +1,4 @@
-# DocExtract — Distributed Document Search Service
+# DocEx — Distributed Document Search Service
 
 A prototype distributed document search service with multi-tenancy, full-text search, caching, and rate limiting. Built with FastAPI, PostgreSQL FTS, and Redis.
 

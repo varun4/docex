@@ -1,4 +1,4 @@
-# DocExtract — Specification
+# DocEx — Specification
 
 ## Tech Stack
 - **Framework**: FastAPI (Python 3.11+)
