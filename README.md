@@ -77,7 +77,7 @@ curl http://localhost:8000/health
 ```
 
 ## Scripts
-
+```
 | Script | Purpose |
 |---|---|---|
 | `scripts/deploy.sh` | Bootstrap script — installs Docker, configures, starts services, inits DB/ES, seeds data |
@@ -85,6 +85,7 @@ curl http://localhost:8000/health
 | `scripts/bulk_import.py` | Imports JSONL → API (`--api`), with `--rate` throttle |
 | `scripts/init_db.py` | Creates/updates PostgreSQL outbox schema (idempotent) |
 | `scripts/init_es.py` | Creates Elasticsearch index with mapping (idempotent) |
+```
 
 ## Project Structure
 
