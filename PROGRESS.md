@@ -46,3 +46,7 @@
 - [x] Standard validation error envelope (RequestValidationError handler)
 - [x] Document health degraded/unavailable states in SPEC.md
 - [x] Replace raw dict DELETE response with Pydantic model
+
+## 🎯 Housekeeping Fixes (Jul 2026)
+- [x] Add missing deps to `pyproject.toml` — `elasticsearch[async]`, `aiokafka`, `prometheus-client`
+- [x] Fix `.env` DB name — `docsextract` → `docex`
