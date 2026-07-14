@@ -27,7 +27,14 @@ INDEX_MAPPING = {
         "properties": {
             "doc_id":       {"type": "keyword"},
             "tenant_id":    {"type": "keyword"},
-            "title":        {"type": "text", "analyzer": "english"},
+            "content_hash": {"type": "keyword"},
+            "title": {
+                "type": "text",
+                "analyzer": "english",
+                "fields": {
+                    "keyword": {"type": "keyword"}
+                }
+            },
             "content":      {"type": "text", "analyzer": "english"},
             "metadata":     {"type": "object", "enabled": False},
             "created_at":   {"type": "date"},

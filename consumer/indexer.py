@@ -8,6 +8,7 @@ import redis.asyncio as aioredis
 from elasticsearch import AsyncElasticsearch
 
 from app.config import Settings
+from app.repositories.hash_utils import compute_content_hash
 from app.schemas.documents import DocumentResponse
 from app.repositories.outbox_repository import OutboxRepository
 
@@ -64,9 +65,11 @@ class Indexer:
                     ignore=[404],
                 )
             else:
+                content_hash = compute_content_hash(tenant_id, title, content)
                 body = {
                     "doc_id": doc_id,
                     "tenant_id": tenant_id,
+                    "content_hash": content_hash,
                     "title": title,
                     "content": content,
                     "metadata": metadata,

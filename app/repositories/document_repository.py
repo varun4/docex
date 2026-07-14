@@ -5,6 +5,7 @@ import uuid
 from elasticsearch import AsyncElasticsearch
 
 from app.config import Settings
+from app.repositories.hash_utils import compute_content_hash
 from app.schemas.documents import DocumentResponse
 from app.schemas.search import SearchResult
 
@@ -125,6 +126,47 @@ class DocumentRepository:
         )
         return True
 
+    async def find_by_hash(
+        self,
+        tenant_id: str,
+        content_hash: str,
+    ) -> DocumentResponse | None:
+        """Look up a document by its content hash.
+
+        Args:
+            tenant_id: Tenant namespace filter.
+            content_hash: SHA256 hex digest.
+
+        Returns:
+            DocumentResponse if found, else None.
+        """
+        result = await self.es.search(
+            index=settings.es_index_name,
+            body={
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"term": {"tenant_id": tenant_id}},
+                            {"term": {"content_hash": content_hash}},
+                        ]
+                    }
+                },
+                "size": 1,
+            },
+        )
+        hits = result["hits"]["hits"]
+        if not hits:
+            return None
+        source = hits[0]["_source"]
+        return DocumentResponse.model_validate({
+            "id": source["doc_id"],
+            "title": source["title"],
+            "content": source["content"],
+            "metadata": source.get("metadata", {}),
+            "created_at": source.get("created_at"),
+            "updated_at": source.get("updated_at"),
+        })
+
     async def search(
         self,
         tenant_id: str,
@@ -134,7 +176,8 @@ class DocumentRepository:
     ) -> tuple[list[SearchResult], int]:
         """Full-text search across documents, scoped by tenant.
 
-        Uses multi_match with title^2 boost and best_fields type.
+        Uses multi_match with title^2 boost, title.keyword^3 for exact
+        matches, and most_fields type to sum scores across fields.
 
         Args:
             tenant_id: Tenant namespace filter.
@@ -153,8 +196,8 @@ class DocumentRepository:
                         {
                             "multi_match": {
                                 "query": query,
-                                "fields": ["title^2", "content"],
-                                "type": "best_fields",
+                                "fields": ["title^2", "title.keyword^3", "content"],
+                                "type": "most_fields",
                             }
                         },
                     ]
