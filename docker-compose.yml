@@ -4,9 +4,7 @@ services:
     environment:
       POSTGRES_DB: docex
       POSTGRES_USER: docsextract
-      POSTGRES_PASSWORD: docsextract
-    ports:
-      - "5433:5432"
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-docsextract}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -14,25 +12,23 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   elasticsearch:
     image: elasticsearch:8.17.0
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
-    ports:
-      - "9200:9200"
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
     volumes:
       - esdata:/usr/share/elasticsearch/data
     healthcheck:
@@ -40,6 +36,7 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+    restart: unless-stopped
 
   kafka:
     image: apache/kafka:4.0.0
@@ -57,23 +54,28 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       CLUSTER_ID: docex-cluster
       KAFKA_NUM_PARTITIONS: 3
-    ports:
-      - "9092:9092"
+      KAFKA_HEAP_OPTS: -Xmx256m -Xms256m
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafkadata:/var/lib/kafka/data
     healthcheck:
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9092"]
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   app:
     build:
       context: .
+      # network: host is required for WSL DNS resolution during pip install.
+      # Harmless on native Linux (Oracle, Ubuntu) — can be safely removed there.
       network: host
     ports:
       - "8000:8000"
     environment:
       PYTHONPATH: /app
-      DATABASE_URL: postgresql://docsextract:docsextract@postgres:5432/docex
+      DATABASE_URL: postgresql://docsextract:${PG_PASSWORD:-docsextract}@postgres:5432/docex
       REDIS_URL: redis://redis:6379/0
       ELASTICSEARCH_URL: http://elasticsearch:9200
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -87,15 +89,18 @@ services:
       kafka:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
 
   consumer:
     build:
       context: .
       dockerfile: Dockerfile.consumer
+      # network: host is required for WSL DNS resolution during pip install.
+      # Harmless on native Linux (Oracle, Ubuntu) — can be safely removed there.
       network: host
     environment:
       PYTHONPATH: /app
-      DATABASE_URL: postgresql://docsextract:docsextract@postgres:5432/docex
+      DATABASE_URL: postgresql://docsextract:${PG_PASSWORD:-docsextract}@postgres:5432/docex
       REDIS_URL: redis://redis:6379/0
       ELASTICSEARCH_URL: http://elasticsearch:9200
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -108,7 +113,26 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-}
+    depends_on:
+      - app
+    restart: unless-stopped
 
 volumes:
   pgdata:
   esdata:
+  kafkadata:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,11 @@
+{
+    admin off
+}
+
+:80 {
+    reverse_proxy app:8000
+}
+
+{$DOMAIN} {
+    reverse_proxy app:8000
+}

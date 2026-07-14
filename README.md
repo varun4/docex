@@ -9,6 +9,24 @@ A prototype distributed document search service with multi-tenancy, full-text se
 
 ## Quick Start
 
+### One-command deploy (recommended)
+
+```bash
+git clone https://github.com/varun4/docex.git
+cd docex
+./scripts/deploy.sh --seed
+```
+
+The deploy script handles everything: Docker install (if missing), `.env` config, service startup, DB/ES initialization, and optional seed data import.
+
+For a public instance with HTTPS:
+
+```bash
+./scripts/deploy.sh --domain docex.example.com --email admin@example.com --seed
+```
+
+### Manual setup
+
 ```bash
 # 1. Clone and configure
 git clone <repo-url>
@@ -31,7 +49,7 @@ docker compose run app python scripts/seed.py --output data/seed.jsonl
 docker compose run app python scripts/bulk_import.py data/seed.jsonl --api http://app:8000 --tenant stardewvalley
 ```
 
-The API is available at `http://localhost:8000`. Documents are ingested asynchronously — `POST /documents` returns immediately with an `event_id`, and the consumer process indexes into Elasticsearch in the background.
+The API is available at `http://localhost:8000` (or `https://your.domain` with `--domain`). Documents are ingested asynchronously — `POST /documents` returns immediately with an `event_id`, and the consumer process indexes into Elasticsearch in the background.
 
 ## Usage
 
@@ -61,9 +79,10 @@ curl http://localhost:8000/health
 ## Scripts
 
 | Script | Purpose |
-|---|---|
+|---|---|---|
+| `scripts/deploy.sh` | Bootstrap script — installs Docker, configures, starts services, inits DB/ES, seeds data |
 | `scripts/seed.py` | Fetches pages from a MediaWiki API → JSONL |
-| `scripts/bulk_import.py` | Imports JSONL → API (`--api`) or direct to DB (`--db-url`) |
+| `scripts/bulk_import.py` | Imports JSONL → API (`--api`), with `--rate` throttle |
 | `scripts/init_db.py` | Creates/updates PostgreSQL outbox schema (idempotent) |
 | `scripts/init_es.py` | Creates Elasticsearch index with mapping (idempotent) |
 
