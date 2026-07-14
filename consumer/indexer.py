@@ -73,6 +73,15 @@ class Indexer:
                 doc_response.model_dump_json(),
             )
 
+            cursor = 0
+            pattern = f"search:{tenant_id}:*"
+            while True:
+                cursor, keys = await self.redis.scan(cursor, match=pattern, count=settings.cache_scan_count)
+                if keys:
+                    await self.redis.delete(*keys)
+                if cursor == 0:
+                    break
+
             async with self.pg_pool.acquire() as conn:
                 await self.outbox_repo.update_status(conn, event_id, "completed")
 

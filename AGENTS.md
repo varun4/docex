@@ -5,6 +5,10 @@
 - Application specs are defined in `SPEC.md`
 - We will put our high level design in `DESIGN.md`
 
+## Testing
+
+- Always rebuild Docker containers (`docker compose up -d --build`) before running checks to ensure the latest code is deployed.
+
 ## When Stuck
 
 - Ask one focused clarifying question.

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from app.config import Settings
 from app.dependencies import get_db_pool, get_elasticsearch, get_kafka_producer, get_redis, get_tenant_id, rate_limit
 from app.repositories.cache_repository import CacheRepository
-from app.schemas.documents import DocumentCreate, DocumentResponse, IngestResponse
+from app.schemas.documents import DeleteResponse, DocumentCreate, DocumentResponse, IngestResponse
 from app.services.document_service import DocumentService
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -41,7 +41,7 @@ async def get_document(
     return await svc.get(tenant_id, str(doc_id))
 
 
-@router.delete("/{doc_id}", status_code=200)
+@router.delete("/{doc_id}", response_model=DeleteResponse, status_code=200)
 async def delete_document(
     doc_id: UUID,
     tenant_id=Depends(get_tenant_id),
@@ -49,4 +49,4 @@ async def delete_document(
     svc=Depends(get_doc_service),
 ):
     await svc.delete(tenant_id, str(doc_id))
-    return {"status": "deleted"}
+    return DeleteResponse(status="deleted")

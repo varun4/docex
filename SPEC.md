@@ -196,4 +196,7 @@ HTTP status codes used: `200`, `202`, `400`, `404`, `429`, `500`, `503`.
 }
 ```
 
-Returns `503` if any critical dependency is down.
+Response status:
+- `"healthy"` + `200` — all dependencies up
+- `"degraded"` + `503` — at least one dependency up, others down
+- `"unavailable"` + `503` — all dependencies down

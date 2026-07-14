@@ -23,3 +23,7 @@ class IngestResponse(BaseModel):
     id: UUID
     event_id: UUID
     status: str = "pending"
+
+
+class DeleteResponse(BaseModel):
+    status: str

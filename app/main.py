@@ -5,6 +5,7 @@ import redis.asyncio as aioredis
 from aiokafka import AIOKafkaProducer
 from elasticsearch import AsyncElasticsearch
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.config import Settings
@@ -43,8 +44,23 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    from app.middleware import request_id_middleware
-    app.middleware("http")(request_id_middleware)
+    from app.middleware import global_rate_limit_middleware
+    app.middleware("http")(global_rate_limit_middleware)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError):
+        from app.metrics import ERRORS
+        ERRORS.labels(type=ErrorCode.VALIDATION_ERROR.value).inc()
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": ErrorCode.VALIDATION_ERROR.value,
+                    "message": "Validation error",
+                    "detail": exc.errors(),
+                }
+            },
+        )
 
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError):
