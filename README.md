@@ -125,26 +125,78 @@ docex/
 
 ## Architecture
 
+```mermaid
+graph TB
+    CLIENT[Client<br/>curl / browser / app]
+
+    subgraph Proxy[" "]
+        CADDY[Caddy<br/>:80 / :443<br/>TLS termination]
+    end
+
+    subgraph API["FastAPI Application"]
+        ROUTER[Routers<br/>POST/GET/DELETE<br/>/search /health]
+        DOC[DocumentService<br/>CRUD + outbox + Kafka]
+        SRC[SearchService<br/>cache-aside]
+        RL[Rate Limiter<br/>sliding window<br/>Redis-backed]
+    end
+
+    subgraph Storage["Data Stores"]
+        PG[(PostgreSQL<br/>Outbox table)]
+        ES[(Elasticsearch<br/>Document index<br/>BM25 scoring)]
+        RC[(Redis<br/>Read cache<br/>Rate counter)]
+    end
+
+    subgraph Stream["Event Stream"]
+        K{{Kafka<br/>documents.ingest<br/>3 partitions}}
+        CON[Consumer<br/>indexer.py]
+    end
+
+    CLIENT -->|HTTP / HTTPS| CADDY
+    CADDY -->|proxy :8000| ROUTER
+    ROUTER --> RL
+    ROUTER --> DOC
+    ROUTER --> SRC
+
+    DOC -->|write event| PG
+    DOC -->|publish event| K
+    DOC -->|get / delete| ES
+    DOC -->|evict cache| RC
+
+    K -->|consume| CON
+    CON -->|index| ES
+    CON -->|warm + invalidate<br/>search cache| RC
+
+    SRC -->|check| RC
+    SRC -->|miss → multi_match<br/>title^2, keyword^3| ES
+    SRC -->|cache result| RC
+```
+
+### Component summary
+
+| Component | Role |
+|-----------|------|
+| **Caddy** | Reverse proxy — terminates TLS, auto HTTPS via Let's Encrypt |
+| **FastAPI** | HTTP API — POST/GET/DELETE documents, full-text search, health |
+| **PostgreSQL** | Outbox table only — event journal for async ingest |
+| **Kafka** | Event stream — 3 partitions, partitioned by `tenant_id` |
+| **Consumer** | Background worker — reads Kafka, indexes into ES, warms Redis |
+| **Elasticsearch** | Document store + search index — BM25 scoring, multi-match |
+| **Redis** | Read cache (cache-aside) + sliding window rate limiter |
+
 ### Ingest Flow (async)
 ```
 POST /documents ──▶ PG Outbox ──▶ Kafka ──▶ Consumer ──▶ Elasticsearch
                                                │
-                                               └──▶ Redis (cache warm)
+                                               └──▶ Redis (cache warm + invalidate)
 ```
 
 ### Search Flow (cache-aside)
 ```
 GET /search ──▶ Redis (check cache)
                   ├── HIT  ──▶ return cached
-                  └── MISS ──▶ Elasticsearch (multi_match)
+                  └── MISS ──▶ Elasticsearch (multi_match, title^2 + keyword^3)
                                └──▶ cache result in Redis ──▶ return
 ```
-
-- **Elasticsearch**: Document store + search index
-- **PostgreSQL**: Outbox table only (event journal)
-- **Kafka**: Event stream, partitioned by tenant_id
-- **Redis**: Read cache (configurable TTL) + rate limiter
-- **Consumer**: Background worker (independently scalable)
 
 ## Production Readiness
 
