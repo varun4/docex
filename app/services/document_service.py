@@ -1,3 +1,5 @@
+"""Business logic for document CRUD operations with async ingest via outbox + Kafka."""
+
 import uuid
 from datetime import datetime, timezone
 
@@ -20,6 +22,8 @@ settings = Settings()
 
 
 class DocumentService:
+    """Orchestrates document create, get, and delete with outbox, Kafka, ES, and cache."""
+
     def __init__(
         self,
         db_pool: asyncpg.Pool,
@@ -29,6 +33,16 @@ class DocumentService:
         outbox_repo: OutboxRepository | None = None,
         doc_repo: DocumentRepository | None = None,
     ):
+        """Initialize with dependencies.
+
+        Args:
+            db_pool: asyncpg connection pool for outbox writes.
+            es: Async Elasticsearch client.
+            cache: Redis cache repository.
+            kafka_producer: AIOKafka producer for event publishing.
+            outbox_repo: Repository for outbox operations (default: new instance).
+            doc_repo: Repository for ES document operations (default: new instance).
+        """
         self.db_pool = db_pool
         self.es = es
         self.cache = cache
@@ -43,6 +57,19 @@ class DocumentService:
         content: str,
         metadata: dict | None = None,
     ) -> IngestResponse:
+        """Create a document via async ingest pipeline.
+
+        Writes to the PG outbox, publishes a Kafka event, and returns immediately.
+
+        Args:
+            tenant_id: Tenant namespace.
+            title: Document title.
+            content: Document body text.
+            metadata: Optional arbitrary JSON metadata.
+
+        Returns:
+            IngestResponse with status 'pending' and the event_id for tracking.
+        """
         doc_id = uuid.uuid4()
 
         async with self.db_pool.acquire() as conn:
@@ -55,6 +82,18 @@ class DocumentService:
         return IngestResponse(id=doc_id, event_id=event.event_id, status="pending")
 
     async def get(self, tenant_id: str, doc_id: str) -> DocumentResponse:
+        """Retrieve a document by id with cache-aside (Redis → ES).
+
+        Args:
+            tenant_id: Tenant namespace.
+            doc_id: Document UUID string.
+
+        Returns:
+            DocumentResponse from cache or ES.
+
+        Raises:
+            AppError: 404 if the document is not found.
+        """
         cached = await self.cache.get_document(tenant_id, doc_id)
         if cached:
             CACHE_OPS.labels(operation="hit", type="document").inc()
@@ -75,6 +114,15 @@ class DocumentService:
         return doc
 
     async def delete(self, tenant_id: str, doc_id: str) -> None:
+        """Delete a document from ES and evict cache entries.
+
+        Args:
+            tenant_id: Tenant namespace.
+            doc_id: Document UUID string.
+
+        Raises:
+            AppError: 404 if the document is not found.
+        """
         deleted = await self.doc_repo.delete(tenant_id, uuid.UUID(doc_id))
 
         if not deleted:

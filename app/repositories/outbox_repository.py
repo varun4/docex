@@ -1,3 +1,5 @@
+"""PostgreSQL repository for the document event outbox table."""
+
 import json
 import uuid
 from datetime import datetime, timezone
@@ -8,6 +10,7 @@ from app.schemas.events import DocumentEvent
 
 
 class OutboxRepository:
+    """Provides insert, update, and query operations on the document_events outbox table."""
     async def insert_event(
         self,
         conn: asyncpg.Connection,
@@ -18,6 +21,20 @@ class OutboxRepository:
         doc_id: uuid.UUID | None = None,
         event_type: str = "create",
     ) -> DocumentEvent:
+        """Insert a new event into the outbox table.
+
+        Args:
+            conn: An active asyncpg connection (from pool).
+            tenant_id: Tenant namespace.
+            title: Document title.
+            content: Document body text.
+            metadata: Optional JSON metadata.
+            doc_id: Optional document UUID (generated if None).
+            event_type: Type of event ('create', 'update', 'delete').
+
+        Returns:
+            A DocumentEvent model with the persisted event data.
+        """
         event_id = uuid.uuid4()
         row = await conn.fetchrow(
             """
@@ -54,6 +71,14 @@ class OutboxRepository:
         status: str,
         error: str | None = None,
     ):
+        """Update the processing status of an outbox event.
+
+        Args:
+            conn: An active asyncpg connection.
+            event_id: UUID of the event to update.
+            status: New status ('completed' or 'failed').
+            error: Optional error message if the event failed.
+        """
         await conn.execute(
             """
             UPDATE document_events
@@ -70,6 +95,15 @@ class OutboxRepository:
         conn: asyncpg.Connection,
         limit: int = 100,
     ) -> list[dict]:
+        """Fetch pending events for processing, oldest first.
+
+        Args:
+            conn: An active asyncpg connection.
+            limit: Maximum number of events to return (default 100).
+
+        Returns:
+            List of event rows as dicts.
+        """
         rows = await conn.fetch(
             """
             SELECT * FROM document_events

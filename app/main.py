@@ -1,3 +1,5 @@
+"""FastAPI application factory with lifespan, middleware, exception handlers, and router registration."""
+
 from contextlib import asynccontextmanager
 
 import asyncpg
@@ -18,6 +20,10 @@ settings = Settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Manage application lifecycle: create connections on startup, close on shutdown.
+
+    Initializes asyncpg pool, Redis, Elasticsearch client, and Kafka producer.
+    """
     app.state.db_pool = await asyncpg.create_pool(
         dsn=settings.database_url,
         min_size=settings.db_pool_min_size,
@@ -38,6 +44,14 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    """Create and configure the FastAPI application instance.
+
+    Registers middleware, exception handlers (AppError, RequestValidationError, generic),
+    and all route routers.
+
+    Returns:
+        Configured FastAPI application.
+    """
     app = FastAPI(
         title="DocEx",
         version=settings.version,
@@ -49,6 +63,8 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError):
+        """Handle Pydantic validation errors with a standardized error envelope."""
+
         from app.metrics import ERRORS
         ERRORS.labels(type=ErrorCode.VALIDATION_ERROR.value).inc()
         return JSONResponse(
@@ -64,6 +80,8 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError):
+        """Handle known application errors with the standard error envelope."""
+
         from app.metrics import ERRORS
         ERRORS.labels(type=exc.code.value).inc()
         return JSONResponse(
@@ -79,6 +97,8 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def unhandled_error_handler(request: Request, exc: Exception):
+        """Catch-all handler for unhandled exceptions (returns 500)."""
+
         from app.metrics import ERRORS
         ERRORS.labels(type="unhandled").inc()
         return JSONResponse(

@@ -1,3 +1,5 @@
+"""Elasticsearch repository for document CRUD and full-text search operations."""
+
 import uuid
 
 from elasticsearch import AsyncElasticsearch
@@ -10,7 +12,14 @@ settings = Settings()
 
 
 class DocumentRepository:
+    """Provides document-level data access against Elasticsearch."""
+
     def __init__(self, es: AsyncElasticsearch):
+        """Initialize with an Elasticsearch client.
+
+        Args:
+            es: Async Elasticsearch client.
+        """
         self.es = es
 
     async def index_document(
@@ -21,6 +30,18 @@ class DocumentRepository:
         content: str,
         metadata: dict | None = None,
     ) -> dict:
+        """Index a document into Elasticsearch.
+
+        Args:
+            tenant_id: Tenant namespace.
+            doc_id: UUID for the document.
+            title: Document title.
+            content: Document body text.
+            metadata: Optional arbitrary JSON metadata.
+
+        Returns:
+            The indexed document body as a dict.
+        """
         body = {
             "doc_id": str(doc_id),
             "tenant_id": tenant_id,
@@ -41,6 +62,15 @@ class DocumentRepository:
         tenant_id: str,
         doc_id: uuid.UUID,
     ) -> DocumentResponse | None:
+        """Retrieve a document by its id, scoped to the given tenant.
+
+        Args:
+            tenant_id: Tenant namespace for access control.
+            doc_id: UUID of the document.
+
+        Returns:
+            DocumentResponse if found and owned by tenant, else None.
+        """
         try:
             result = await self.es.get(
                 index=settings.es_index_name,
@@ -67,6 +97,15 @@ class DocumentRepository:
         tenant_id: str,
         doc_id: uuid.UUID,
     ) -> bool:
+        """Delete a document from Elasticsearch, scoped to the given tenant.
+
+        Args:
+            tenant_id: Tenant namespace.
+            doc_id: UUID of the document to delete.
+
+        Returns:
+            True if the document was found and deleted, False otherwise.
+        """
         try:
             doc = await self.es.get(
                 index=settings.es_index_name,
@@ -93,6 +132,19 @@ class DocumentRepository:
         from_: int,
         size: int,
     ) -> tuple[list[SearchResult], int]:
+        """Full-text search across documents, scoped by tenant.
+
+        Uses multi_match with title^2 boost and best_fields type.
+
+        Args:
+            tenant_id: Tenant namespace filter.
+            query: Free-text search string.
+            from_: Offset for pagination.
+            size: Number of results to return.
+
+        Returns:
+            A tuple of (list of SearchResult, total hit count).
+        """
         body = {
             "query": {
                 "bool": {
@@ -129,6 +181,11 @@ class DocumentRepository:
         return results, total
 
     async def ping(self) -> bool:
+        """Check Elasticsearch connectivity.
+
+        Returns:
+            True if ES responds to ping, False otherwise.
+        """
         try:
             return await self.es.ping()
         except Exception:

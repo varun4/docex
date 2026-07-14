@@ -1,0 +1,1 @@
+"""DocEx FastAPI application package."""

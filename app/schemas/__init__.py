@@ -1,3 +1,4 @@
+"""Re-export all Pydantic models for convenient imports."""
 from app.schemas.common import ErrorResponse
 from app.schemas.documents import DocumentCreate, DocumentResponse, IngestResponse
 from app.schemas.events import DocumentEvent

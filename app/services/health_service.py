@@ -1,3 +1,5 @@
+"""Health check service that pings all external dependencies and aggregates status."""
+
 import time
 
 import asyncpg
@@ -13,6 +15,8 @@ settings = Settings()
 
 
 class HealthService:
+    """Pings PostgreSQL, Redis, Elasticsearch, and Kafka; returns aggregated health."""
+
     def __init__(
         self,
         db_pool: asyncpg.Pool,
@@ -21,6 +25,15 @@ class HealthService:
         kafka_producer: AIOKafkaProducer,
         doc_repo: DocumentRepository | None = None,
     ):
+        """Initialize with direct connections to all external services.
+
+        Args:
+            db_pool: asyncpg connection pool for PG health check.
+            redis: Async Redis client.
+            es: Async Elasticsearch client.
+            kafka_producer: AIOKafka producer for broker health check.
+            doc_repo: Repository wrapping ES ping (default: new instance).
+        """
         self.db_pool = db_pool
         self.redis = redis
         self.es = es
@@ -28,6 +41,12 @@ class HealthService:
         self.doc_repo = doc_repo or DocumentRepository(es)
 
     async def check(self) -> HealthResponse:
+        """Ping all dependencies and aggregate results.
+
+        Returns:
+            HealthResponse with status 'healthy', 'degraded', or 'unavailable'
+            and per-dependency latency.
+        """
         pg_ok, pg_latency = await self._check_postgres()
         redis_ok, redis_latency = await self._check_redis()
         es_ok, es_latency = await self._check_elasticsearch()
@@ -58,6 +77,11 @@ class HealthService:
         )
 
     async def _check_postgres(self) -> tuple[bool, float | None]:
+        """Ping PostgreSQL with SELECT 1 and measure latency.
+
+        Returns:
+            Tuple of (is_up: bool, latency_ms: float | None).
+        """
         try:
             start = time.monotonic()
             async with self.db_pool.acquire() as conn:
@@ -68,6 +92,11 @@ class HealthService:
             return False, None
 
     async def _check_redis(self) -> tuple[bool, float | None]:
+        """Ping Redis and measure latency.
+
+        Returns:
+            Tuple of (is_up: bool, latency_ms: float | None).
+        """
         try:
             start = time.monotonic()
             await self.redis.ping()
@@ -77,6 +106,11 @@ class HealthService:
             return False, None
 
     async def _check_elasticsearch(self) -> tuple[bool, float | None]:
+        """Ping Elasticsearch and measure latency.
+
+        Returns:
+            Tuple of (is_up: bool, latency_ms: float | None).
+        """
         try:
             start = time.monotonic()
             ok = await self.doc_repo.ping()
@@ -86,6 +120,11 @@ class HealthService:
             return False, None
 
     async def _check_kafka(self) -> tuple[bool, float | None]:
+        """Force metadata update on the Kafka producer to verify broker connectivity.
+
+        Returns:
+            Tuple of (is_up: bool, latency_ms: float | None).
+        """
         try:
             start = time.monotonic()
             await self.kafka_producer.client.force_metadata_update()

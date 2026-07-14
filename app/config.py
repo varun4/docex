@@ -1,7 +1,10 @@
+"""Application configuration loaded from environment variables and .env file."""
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    """Central configuration for all runtime parameters (DB, ES, Kafka, rate limits, cache)."""
     database_url: str = "postgresql://docsextract:docsextract@localhost:5432/docex"
     redis_url: str = "redis://localhost:6379/0"
     elasticsearch_url: str = "http://localhost:9200"

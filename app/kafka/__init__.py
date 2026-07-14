@@ -1,0 +1,1 @@
+"""Kafka producer for publishing document events to the ingest topic."""

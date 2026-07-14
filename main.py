@@ -1,0 +1,1 @@
+"""Entry point for running the app directly with `python main.py` (delegates to uvicorn)."""

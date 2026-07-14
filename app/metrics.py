@@ -1,3 +1,5 @@
+"""Prometheus metric definitions for request count, duration, cache ops, pool size, and errors."""
+
 from prometheus_client import Counter, Gauge, Histogram
 
 REQUESTS = Counter(
@@ -5,6 +7,7 @@ REQUESTS = Counter(
     "Total HTTP requests",
     ["method", "endpoint", "status"],
 )
+"""Total HTTP request count, labelled by method, endpoint path, and response status."""
 
 REQUEST_DURATION = Histogram(
     "docex_request_duration_seconds",

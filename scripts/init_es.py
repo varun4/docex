@@ -38,6 +38,7 @@ INDEX_MAPPING = {
 
 
 async def main():
+    """Create the Elasticsearch index with the defined mapping if it doesn't already exist."""
     parser = argparse.ArgumentParser(description="Initialize Elasticsearch index")
     parser.add_argument(
         "--es-url",

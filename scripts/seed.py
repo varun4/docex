@@ -29,6 +29,14 @@ log = logging.getLogger("seed")
 # ── Wikitext stripping ──────────────────────────────────────────────
 
 def strip_templates(text: str) -> str:
+    """Remove MediaWiki template syntax ({{...}}) from wikitext.
+
+    Args:
+        text: Raw wikitext.
+
+    Returns:
+        Text with template markup stripped.
+    """
     result = []
     depth = 0
     i = 0
@@ -47,6 +55,14 @@ def strip_templates(text: str) -> str:
 
 
 def strip_tables(text: str) -> str:
+    """Remove MediaWiki table markup ({| ... |}) from wikitext.
+
+    Args:
+        text: Raw wikitext.
+
+    Returns:
+        Text with table markup removed.
+    """
     lines = text.split("\n")
     out = []
     in_table = False
@@ -64,6 +80,18 @@ def strip_tables(text: str) -> str:
 
 
 def strip_wikitext(wikitext: str) -> str:
+    """Strip all WikiMedia markup from raw wikitext, returning plain text.
+
+    Removes templates, tables, refs, comments, HTML tags, file links,
+    wiki links, external links, heading markers, bold/italic, horizontal
+    rules, list markers, and table cell markers.
+
+    Args:
+        wikitext: Raw MediaWiki source text.
+
+    Returns:
+        Clean plain text content.
+    """
     text = wikitext
 
     text = strip_templates(text)
@@ -107,6 +135,7 @@ def strip_wikitext(wikitext: str) -> str:
 # ── Wiki API ─────────────────────────────────────────────────────────
 
 def make_client():
+    """Create an async HTTP client configured with the seed user-agent."""
     return httpx.AsyncClient(
         headers={"User-Agent": USER_AGENT},
         timeout=30.0,
@@ -114,6 +143,14 @@ def make_client():
 
 
 async def fetch_all_titles(client: httpx.AsyncClient) -> list[dict]:
+    """Fetch all page titles from the MediaWiki API via paginated allpages.
+
+    Args:
+        client: The async HTTP client.
+
+    Returns:
+        List of dicts with 'pageid' and 'title' keys.
+    """
     titles = []
     apcontinue = None
     params = {
@@ -148,6 +185,15 @@ async def fetch_all_titles(client: httpx.AsyncClient) -> list[dict]:
 async def fetch_page_content(
     client: httpx.AsyncClient, batch: list[dict]
 ) -> list[dict]:
+    """Fetch the raw wikitext content for a batch of pages by title.
+
+    Args:
+        client: The async HTTP client.
+        batch: List of page dicts with 'title' keys.
+
+    Returns:
+        List of dicts with 'pageid', 'title', and 'content' keys.
+    """
     titles_str = "|".join(p["title"] for p in batch)
     params = {
         "action": "query",
@@ -182,6 +228,18 @@ async def fetch_page_content(
 
 
 def make_document(title: str, content: str, pageid: int) -> dict:
+    """Convert a wiki page to a DocEx document JSON payload.
+
+    Strips wikitext and skips redirect pages.
+
+    Args:
+        title: Page title.
+        content: Raw wikitext content.
+        pageid: MediaWiki page ID.
+
+    Returns:
+        Document dict, or None if the page is a redirect or has no content.
+    """
     plain = strip_wikitext(content)
     if not plain or plain.startswith("REDIRECT"):
         return None
@@ -200,6 +258,12 @@ def make_document(title: str, content: str, pageid: int) -> dict:
 # ── Output ───────────────────────────────────────────────────────────
 
 def write_jsonl(docs: list[dict], path: Path):
+    """Write a list of document dicts to a JSONL file.
+
+    Args:
+        docs: List of document dicts (None entries are skipped).
+        path: Output file path.
+    """
     count = 0
     with open(path, "w", encoding="utf-8") as f:
         for doc in docs:
@@ -210,6 +274,12 @@ def write_jsonl(docs: list[dict], path: Path):
 
 
 async def post_to_api(docs: list[dict], api_url: str):
+    """POST documents to the DocEx API sequentially.
+
+    Args:
+        docs: List of document dicts.
+        api_url: Base URL of the DocEx API.
+    """
     count = 0
     async with httpx.AsyncClient(timeout=30.0) as client:
         for doc in docs:
@@ -233,6 +303,7 @@ async def post_to_api(docs: list[dict], api_url: str):
 # ── Main ─────────────────────────────────────────────────────────────
 
 async def main():
+    """Main entry point: fetch wiki pages, extract content, output JSONL and/or POST to API."""
     parser = argparse.ArgumentParser(description="Seed DocEx with Stardew Valley Wiki data")
     parser.add_argument(
         "--output", "-o",
@@ -241,7 +312,7 @@ async def main():
     )
     parser.add_argument(
         "--api",
-        help="Base URL of the DocExtract API (e.g. http://localhost:8000)",
+        help="Base URL of the DocEx API (e.g. http://localhost:8000)",
     )
     parser.add_argument(
         "--delay",

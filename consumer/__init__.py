@@ -1,0 +1,1 @@
+"""Background consumer process: Kafka → Elasticsearch indexing + cache warm + outbox status."""

@@ -20,6 +20,18 @@ BATCH_SIZE = 50
 
 
 async def import_via_api(docs: list[dict], api_url: str, tenant: str, batch: int, max_docs: int | None):
+    """POST documents to the DocEx API in concurrent batches via HTTP.
+
+    Args:
+        docs: List of document dicts to import.
+        api_url: Base URL of the DocEx API.
+        tenant: Tenant ID for the X-Tenant-ID header.
+        batch: Number of concurrent POST requests per batch.
+        max_docs: Optional cap on the number of documents to import.
+
+    Returns:
+        Tuple of (success_count, error_count).
+    """
     success = 0
     errors = 0
 
@@ -56,6 +68,7 @@ async def import_via_api(docs: list[dict], api_url: str, tenant: str, batch: int
 
 
 async def main():
+    """Load documents from a JSONL file and import them into the DocEx API."""
     parser = argparse.ArgumentParser(description="Bulk-import seed data into DocEx")
     parser.add_argument("input", help="Path to JSONL file")
     parser.add_argument("--api", default="http://localhost:8000", help="API base URL")

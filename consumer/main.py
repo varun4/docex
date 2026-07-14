@@ -1,3 +1,5 @@
+"""Background Kafka consumer entry point: polls documents.ingest, indexes to ES, warms cache, updates outbox."""
+
 import asyncio
 import json
 import logging
@@ -21,6 +23,12 @@ settings = Settings()
 
 
 async def main():
+    """Run the Kafka consumer loop.
+
+    Connects to Kafka, PostgreSQL, Redis, and Elasticsearch.
+    Polls the `documents.ingest` topic and delegates to Indexer for each message.
+    Handles graceful shutdown on CancelledError.
+    """
     log.info("Starting consumer (group=%s, topic=%s)", settings.kafka_group_id, settings.kafka_topic)
 
     pg_pool = await asyncpg.create_pool(

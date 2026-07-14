@@ -1,3 +1,5 @@
+"""ASGI middleware for global rate limiting, request ID injection, rate limit headers, and Prometheus metrics."""
+
 import time
 import uuid
 
@@ -14,6 +16,10 @@ SKIP_GLOBAL_RATE_LIMIT = {"/health", "/metrics"}
 
 
 async def global_rate_limit_middleware(request: Request, call_next):
+    """Enforce a global rate limit (req/s) across all tenants before processing the request.
+
+    Skips /health and /metrics endpoints. Passes through to request_id_middleware.
+    """
     if request.url.path not in SKIP_GLOBAL_RATE_LIMIT:
         redis = getattr(request.app.state, "redis", None)
         if redis is not None:
@@ -45,6 +51,15 @@ async def global_rate_limit_middleware(request: Request, call_next):
 
 
 async def request_id_middleware(request: Request, call_next):
+    """Inject X-Request-ID, rate limit headers, and collect Prometheus request metrics.
+
+    Args:
+        request: The incoming HTTP request.
+        call_next: The next middleware or route handler.
+
+    Returns:
+        Response with added headers for request ID and rate limit info.
+    """
     request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:16])
     request.state.request_id = request_id
 

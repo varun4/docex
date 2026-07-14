@@ -1,3 +1,5 @@
+"""REST endpoint for full-text search: GET /search."""
+
 from fastapi import APIRouter, Depends, Query
 
 from app.config import Settings
@@ -14,6 +16,7 @@ def get_search_service(
     es=Depends(get_elasticsearch),
     redis=Depends(get_redis),
 ) -> SearchService:
+    """Dependency factory that wires up SearchService."""
     return SearchService(es, CacheRepository(redis))
 
 
@@ -26,4 +29,8 @@ async def search(
     _=Depends(rate_limit("search", settings.rate_limit_search)),
     svc=Depends(get_search_service),
 ):
+    """Full-text search across tenant-scoped documents with pagination.
+
+    Results are cached in Redis with a configurable TTL (default 60s).
+    """
     return await svc.search(tenant_id, q, page, size)

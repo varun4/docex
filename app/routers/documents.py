@@ -1,3 +1,5 @@
+"""REST endpoints for document CRUD: POST/GET/DELETE /documents."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -18,6 +20,7 @@ def get_doc_service(
     redis=Depends(get_redis),
     kafka_producer=Depends(get_kafka_producer),
 ) -> DocumentService:
+    """Dependency factory that wires up DocumentService with its dependencies."""
     return DocumentService(db_pool, es, CacheRepository(redis), kafka_producer)
 
 
@@ -28,6 +31,11 @@ async def create_document(
     _=Depends(rate_limit("index", settings.rate_limit_index)),
     svc=Depends(get_doc_service),
 ):
+    """Ingest a document asynchronously.
+
+    Returns immediately with a 202 and an event_id for tracking.
+    Actual indexing happens in the background consumer process.
+    """
     return await svc.create(tenant_id, body.title, body.content, body.metadata)
 
 
@@ -38,6 +46,7 @@ async def get_document(
     _=Depends(rate_limit("search", settings.rate_limit_search)),
     svc=Depends(get_doc_service),
 ):
+    """Retrieve a document by its UUID, scoped to the tenant."""
     return await svc.get(tenant_id, str(doc_id))
 
 
@@ -48,5 +57,6 @@ async def delete_document(
     _=Depends(rate_limit("index", settings.rate_limit_index)),
     svc=Depends(get_doc_service),
 ):
+    """Delete a document from Elasticsearch and evict cache entries."""
     await svc.delete(tenant_id, str(doc_id))
     return DeleteResponse(status="deleted")

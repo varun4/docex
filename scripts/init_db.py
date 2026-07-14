@@ -43,6 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_outbox_tenant
 
 
 async def main():
+    """Create the outbox table and indexes if they don't exist in PostgreSQL."""
     parser = argparse.ArgumentParser(description="Initialize the outbox schema")
     parser.add_argument(
         "--db-url",

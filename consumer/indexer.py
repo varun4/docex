@@ -1,3 +1,5 @@
+"""Indexes a Kafka document event into Elasticsearch, warms Redis cache, and updates outbox status."""
+
 import json
 import logging
 
@@ -14,18 +16,36 @@ settings = Settings()
 
 
 class Indexer:
+    """Processes document events from Kafka: ES index/delete, cache warm, outbox status update and search cache invalidation."""
     def __init__(
         self,
         es: AsyncElasticsearch,
         redis: aioredis.Redis,
         pg_pool: asyncpg.Pool,
     ):
+        """Initialize with connections to ES, Redis, and PostgreSQL.
+
+        Args:
+            es: Async Elasticsearch client for indexing/deleting documents.
+            redis: Async Redis client for cache warm.
+            pg_pool: asyncpg pool for outbox status updates.
+        """
         self.es = es
         self.redis = redis
         self.pg_pool = pg_pool
         self.outbox_repo = OutboxRepository()
 
     async def process_event(self, event_data: dict):
+        """Process a single document event from Kafka.
+
+        For 'delete' events, removes the document from ES.
+        For all other events, indexes into ES, warms the doc cache,
+        invalidates the tenant's search cache, and marks the outbox
+        event as 'completed'. On failure, marks as 'failed'.
+
+        Args:
+            event_data: Deserialized Kafka message payload as a dict.
+        """
         event_id = event_data.get("event_id")
         event_type = event_data.get("event_type")
         tenant_id = event_data.get("tenant_id")

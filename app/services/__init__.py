@@ -1,0 +1,1 @@
+"""Business logic layer orchestrating document CRUD, search, and health checks."""
