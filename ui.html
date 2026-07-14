@@ -27,9 +27,9 @@
 
   <nav id="tabs">
     <ul>
-      <li><a href="#ingest" aria-current="page" onclick="showTab('ingest')">Ingest</a></li>
-      <li><a href="#search" onclick="showTab('search')">Search</a></li>
-      <li><a href="#get" onclick="showTab('get')">Get Document</a></li>
+      <li><a href="#ingest" aria-current="page" onclick="return navigateTo('ingest')">Ingest</a></li>
+      <li><a href="#search" onclick="return navigateTo('search')">Search</a></li>
+      <li><a href="#get" onclick="return navigateTo('get')">Get Document</a></li>
     </ul>
   </nav>
 
@@ -111,11 +111,24 @@ const API = window.location.origin;
 
 function $(id) { return document.getElementById(id); }
 
+let ignoreHash = false;
+
 function showTab(name) {
   document.querySelectorAll('article[id^="tab-"]').forEach(e => e.hidden = true);
   document.querySelectorAll('nav a').forEach(a => a.removeAttribute('aria-current'));
   document.querySelector(`nav a[href="#${name}"]`)?.setAttribute('aria-current', 'page');
   $(`tab-${name}`).hidden = false;
+  if (name === 'get' && $('get-id').value) getDoc();
+}
+
+function navigateTo(name) {
+  if (location.hash !== '#' + name) {
+    ignoreHash = true;
+    location.hash = name;
+    ignoreHash = false;
+  }
+  showTab(name);
+  return false;
 }
 
 function tenant() { return $('tenant').value || 'stardewvalley'; }
@@ -185,7 +198,7 @@ async function search(e) {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${r.rank.toFixed(2)}</td><td>${esc(r.title)}</td><td><code>${r.id}</code></td>`;
       tr.style.cursor = 'pointer';
-      tr.onclick = () => { $('get-id').value = r.id; showTab('get'); getDoc(); };
+      tr.onclick = () => { $('get-id').value = r.id; navigateTo('get'); };
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -228,7 +241,12 @@ async function getDoc(e) {
   view.hidden = false;
 }
 
-showTab('ingest');
+window.addEventListener('hashchange', () => {
+  if (ignoreHash) return;
+  showTab(location.hash.replace('#', '') || 'ingest');
+});
+
+navigateTo(location.hash.replace('#', '') || 'ingest');
 </script>
 </body>
 </html>
