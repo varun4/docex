@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bulk-import seed data from a JSONL file into the DocExtract API."""
+"""Bulk-import seed data from a JSONL file into the DocEx API."""
 
 import argparse
 import asyncio
@@ -56,7 +56,7 @@ async def import_via_api(docs: list[dict], api_url: str, tenant: str, batch: int
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Bulk-import seed data into DocExtract")
+    parser = argparse.ArgumentParser(description="Bulk-import seed data into DocEx")
     parser.add_argument("input", help="Path to JSONL file")
     parser.add_argument("--api", default="http://localhost:8000", help="API base URL")
     parser.add_argument("--tenant", default="stardewvalley", help="Tenant ID")

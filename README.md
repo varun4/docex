@@ -106,10 +106,19 @@ docex/
 
 ## Architecture
 
+### Ingest Flow (async)
 ```
-API ──▶ PG Outbox ──▶ Kafka ──▶ Consumer ──▶ Elasticsearch
-                                   │
-                                   └──▶ Redis (cache warm)
+POST /documents ──▶ PG Outbox ──▶ Kafka ──▶ Consumer ──▶ Elasticsearch
+                                               │
+                                               └──▶ Redis (cache warm)
+```
+
+### Search Flow (cache-aside)
+```
+GET /search ──▶ Redis (check cache)
+                  ├── HIT  ──▶ return cached
+                  └── MISS ──▶ Elasticsearch (multi_match)
+                               └──▶ cache result in Redis ──▶ return
 ```
 
 - **Elasticsearch**: Document store + search index

@@ -32,7 +32,7 @@
 
 | Method | Endpoint | Auth Header | Request Body | Response |
 |--------|----------|-------------|--------------|----------|
-| POST | `/documents` | `X-Tenant-ID` | `{id?, title, content, metadata?}` | `202 {id, event_id, status: "pending"}` |
+| POST | `/documents` | `X-Tenant-ID` | `{title, content, metadata?}` | `202 {id, event_id, status: "pending"}` |
 | GET | `/search?q={query}&page=1&size=20` | `X-Tenant-ID` | — | `{results[], total, page, size}` |
 | GET | `/documents/{id}` | `X-Tenant-ID` | — | `{id, title, content, metadata, created_at, updated_at}` |
 | DELETE | `/documents/{id}` | `X-Tenant-ID` | — | `{status}` |
@@ -41,7 +41,7 @@
 ### Document Schema (Request/Response)
 ```json
 {
-  "id": "uuid (auto-generated if omitted)",
+  "id": "uuid (response only)",
   "title": "string (required)",
   "content": "text (required)",
   "metadata": "object (optional, arbitrary JSON)"
@@ -86,7 +86,7 @@ CREATE TABLE document_events (
 {
   "settings": {
     "number_of_shards": 1,
-    "number_of_replicas": 1
+    "number_of_replicas": 0
   },
   "mappings": {
     "properties": {
@@ -176,7 +176,7 @@ All errors return a standardized JSON envelope:
 }
 ```
 
-HTTP status codes used: `200`, `202`, `400`, `401`, `404`, `429`, `500`, `503`.
+HTTP status codes used: `200`, `202`, `400`, `404`, `429`, `500`, `503`.
 
 ---
 

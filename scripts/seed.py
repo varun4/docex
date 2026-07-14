@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed DocExtract with documents from Stardew Valley Wiki."""
+"""Seed DocEx with documents from Stardew Valley Wiki."""
 
 import argparse
 import asyncio
@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx
 
 WIKI_API = "https://stardewvalleywiki.com/mediawiki/api.php"
-USER_AGENT = "DocExtract/0.1 (seed script)"
+USER_AGENT = "DocEx/0.1 (seed script)"
 TENANT = "stardewvalley"
 BATCH_SIZE = 50
 REQUEST_DELAY = 0.5
@@ -233,7 +233,7 @@ async def post_to_api(docs: list[dict], api_url: str):
 # ── Main ─────────────────────────────────────────────────────────────
 
 async def main():
-    parser = argparse.ArgumentParser(description="Seed DocExtract with Stardew Valley Wiki data")
+    parser = argparse.ArgumentParser(description="Seed DocEx with Stardew Valley Wiki data")
     parser.add_argument(
         "--output", "-o",
         type=Path,

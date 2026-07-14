@@ -1,5 +1,4 @@
 import json
-import time
 
 import redis.asyncio as aioredis
 
@@ -40,19 +39,6 @@ class CacheRepository:
                 await self.redis.delete(*keys)
             if cursor == 0:
                 break
-
-    async def check_rate_limit(self, key: str, max_requests: int, window_ms: int = 1000) -> bool:
-        now_ms = int(time.time() * 1000)
-        member = f"{now_ms}:{id(key)}"
-
-        pipe = self.redis.pipeline()
-        pipe.zadd(key, {member: now_ms})
-        pipe.zremrangebyscore(key, 0, now_ms - window_ms)
-        pipe.zcard(key)
-        pipe.expire(key, window_ms // 1000 + 1)
-        results = await pipe.execute()
-
-        return results[2] <= max_requests
 
     async def ping(self) -> bool:
         try:

@@ -83,7 +83,7 @@ Six containers via Docker Compose:
 ### Consumer (Separate Process)
 - **`consumer/__init__.py`**
 - **`consumer/main.py`** — Kafka consumer loop, reads from `documents.ingest` topic
-- **`consumer/indexer.py`** — Indexes documents into Elasticsearch and updates Redis cache
+- **`consumer/indexer.py`** — Indexes documents into Elasticsearch, warms Redis cache, updates outbox status
 
 ---
 
@@ -176,7 +176,7 @@ CREATE INDEX idx_outbox_tenant ON document_events (tenant_id, event_id);
 {
   "settings": {
     "number_of_shards": 1,
-    "number_of_replicas": 1
+    "number_of_replicas": 0
   },
   "mappings": {
     "properties": {
@@ -339,9 +339,7 @@ docex/
 │   ├── kafka/
 │   │   ├── __init__.py
 │   │   └── producer.py          # Kafka async producer
-│   └── middleware/
-│       ├── __init__.py
-│       └── rate_limiter.py
+
 ├── consumer/
 │   ├── __init__.py
 │   ├── main.py                  # Kafka consumer loop
@@ -407,7 +405,7 @@ docex/
 |---|---|
 | `schemas/common.py` | `ErrorResponse(code, message, detail)` |
 | `schemas/documents.py` | `DocumentCreate(title, content, metadata?)`, `DocumentResponse(id, title, content, metadata, created_at, updated_at)`, `IngestResponse(id, event_id, status)` |
-| `schemas/search.py` | `SearchResult(id, title, content?, rank?)`, `SearchResponse(results, total, page, size)` |
+| `schemas/search.py` | `SearchResult(id, title, rank)`, `SearchResponse(results, total, page, size)` |
 | `schemas/health.py` | `DependencyStatus(status, latency_ms)`, `HealthResponse(status, version, dependencies)` |
 | `schemas/events.py` | `DocumentEvent(event_id, event_type, tenant_id, doc_id, title, content, metadata, timestamp)` |
 
@@ -419,17 +417,16 @@ docex/
 - `get_pending_events(conn, limit) → list[dict]`
 
 **`repositories/document_repository.py`** — Elasticsearch:
-- `index_document(es, tenant_id, doc_id, title, content, metadata) → dict`
-- `get_by_id(es, tenant_id, doc_id) → dict | None`
-- `delete(es, tenant_id, doc_id) → bool`
-- `search(es, tenant_id, query, from_, size) → (list[dict], total)`
-- `ping(es) → bool`
+- `index_document(tenant_id, doc_id, title, content, metadata) → dict`
+- `get_by_id(tenant_id, doc_id) → DocumentResponse | None`
+- `delete(tenant_id, doc_id) → bool`
+- `search(tenant_id, query, from_, size) → (list[SearchResult], total)`
+- `ping() → bool`
 
 **`repositories/cache_repository.py`** — Redis:
 - `get/set/delete_document(tenant_id, doc_id)` — doc detail cache
-- `get/set_search_results(tenant_id, query_hash, page, size)` — search cache
+- `get/set_search_results(tenant_id, query_hash)` — search cache
 - `invalidate_search_cache(tenant_id)` — scan & delete `search:{tenant_id}:*`
-- `check_rate_limit(key, max_requests, window_ms) → bool` — sliding window counter
 - `ping() → bool`
 
 ### Phase 4 — Kafka Producer
