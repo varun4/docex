@@ -188,7 +188,7 @@ async function ingest(e) {
 }
 
 async function search(e) {
-  e.preventDefault();
+  if (e) e.preventDefault();
   const q = encodeURIComponent($('search-query').value);
   const p = $('search-page').value;
   const s = $('search-size').value;
