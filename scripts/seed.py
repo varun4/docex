@@ -183,7 +183,7 @@ async def fetch_page_content(
 
 def make_document(title: str, content: str, pageid: int) -> dict:
     plain = strip_wikitext(content)
-    if not plain:
+    if not plain or plain.startswith("REDIRECT"):
         return None
 
     return {

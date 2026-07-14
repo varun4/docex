@@ -25,7 +25,8 @@ class Settings(BaseSettings):
     search_max_size: int = 100
 
     fts_language: str = "english"
-    fts_rank_normalization: int = 1
+    fts_rank_normalization: int = 0
+    fts_rank_weights: str = "{0.05,0.05,0.05,1.0}"
 
     debug: bool = False
     redis_decode_responses: bool = True

@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS documents (
     content     TEXT NOT NULL,
     metadata    JSONB DEFAULT '{{}}',
     search_vector tsvector GENERATED ALWAYS AS (
-        to_tsvector('{fts_language}', coalesce(title, '') || ' ' || coalesce(content, ''))
+        setweight(to_tsvector('{fts_language}', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('{fts_language}', coalesce(content, '')), 'B')
     ) STORED,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()

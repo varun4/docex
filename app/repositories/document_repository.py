@@ -79,30 +79,33 @@ class DocumentRepository:
         limit: int,
         offset: int,
     ) -> tuple[list[SearchResult], int]:
+        tsq = f"websearch_to_tsquery('{settings.fts_language}', $2)"
+
         total = await conn.fetchval(
-            """
+            f"""
             SELECT count(*)
             FROM documents
             WHERE tenant_id = $1
-              AND search_vector @@ plainto_tsquery($3, $2)
+              AND search_vector @@ {tsq}
+              AND content NOT ILIKE 'REDIRECT%'
             """,
             tenant_id,
             query,
-            settings.fts_language,
         )
 
         rows = await conn.fetch(
-            """
-            SELECT id, title, ts_rank(search_vector, plainto_tsquery($3, $2), $4) AS rank
+            f"""
+            SELECT id, title,
+                   ts_rank('{settings.fts_rank_weights}'::float4[], search_vector, {tsq}, $3) AS rank
             FROM documents
             WHERE tenant_id = $1
-              AND search_vector @@ plainto_tsquery($3, $2)
+              AND search_vector @@ {tsq}
+              AND content NOT ILIKE 'REDIRECT%'
             ORDER BY rank DESC
-            LIMIT $5 OFFSET $6
+            LIMIT $4 OFFSET $5
             """,
             tenant_id,
             query,
-            settings.fts_language,
             settings.fts_rank_normalization,
             limit,
             offset,

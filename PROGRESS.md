@@ -27,3 +27,6 @@
 - [x] `app/main.py` — all routers wired in, full OpenAPI spec (5 endpoints)
 - [x] End-to-end test — all 5 endpoints verified (CRUD, search, health, 404s, rate limiting)
 - [x] Rename repo from `docextract` to `docex` — updated all `docsextract` references in project files
+- [x] Search ranking fix — weighted tsvector (setweight A/B), explicit rank weights `{0.05,0.05,0.05,1.0}`, normalization=0, websearch_to_tsquery
+- [x] Redirect page filter — seed.py startswith("REDIRECT"), search-time `NOT content ILIKE 'REDIRECT%'`, 809 purge from DB
+- [x] Makefile start/stop targets — PID-tracked lifecycle with stale process cleanup
