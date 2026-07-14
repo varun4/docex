@@ -1,0 +1,9 @@
+from enum import Enum
+
+
+class ErrorCode(str, Enum):
+    MISSING_TENANT = "MISSING_TENANT"
+    NOT_FOUND = "NOT_FOUND"
+    RATE_LIMITED = "RATE_LIMITED"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
