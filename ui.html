@@ -67,6 +67,13 @@
     <details id="result-search" hidden>
       <summary>Results (<span id="search-total">0</span> total)</summary>
       <div id="search-results"></div>
+      <nav id="search-pagination" hidden>
+        <ul>
+          <li><button id="page-prev" class="secondary">← Prev</button></li>
+          <li><small id="page-info"></small></li>
+          <li><button id="page-next" class="secondary">Next →</button></li>
+        </ul>
+      </nav>
       <details>
         <summary>Raw JSON</summary>
         <pre><code id="resp-search"></code></pre>
@@ -188,13 +195,18 @@ async function search(e) {
   const resp = await api('GET', `/search?q=${q}&page=${p}&size=${s}`);
   $('search-total').textContent = resp.data?.total ?? '?';
   showResult('result-search', resp);
+  const details = $('result-search');
+  details.hidden = false;
+  details.open = true;
+  const d = resp.data;
   const container = $('search-results');
   container.innerHTML = '';
-  if (resp.data?.results) {
+  const pagination = $('search-pagination');
+  if (d?.results?.length) {
     const table = document.createElement('table');
     table.innerHTML = `<thead><tr><th>Rank</th><th>Title</th><th>ID</th></tr></thead>`;
     const tbody = document.createElement('tbody');
-    for (const r of resp.data.results) {
+    for (const r of d.results) {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${r.rank.toFixed(2)}</td><td>${esc(r.title)}</td><td><code>${r.id}</code></td>`;
       tr.style.cursor = 'pointer';
@@ -203,6 +215,18 @@ async function search(e) {
     }
     table.appendChild(tbody);
     container.appendChild(table);
+    const totalPages = Math.ceil(d.total / d.size);
+    const page = d.page;
+    $('page-info').textContent = `Page ${page} of ${totalPages} (${d.total} results)`;
+    const prevBtn = $('page-prev');
+    const nextBtn = $('page-next');
+    prevBtn.disabled = page <= 1;
+    nextBtn.disabled = page >= totalPages;
+    prevBtn.onclick = () => { $('search-page').value = page - 1; search(); };
+    nextBtn.onclick = () => { $('search-page').value = page + 1; search(); };
+    pagination.hidden = false;
+  } else {
+    pagination.hidden = true;
   }
 }
 
