@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     kafka_group_id: str = "documents-ingest-consumer"
 
     rate_limit_search: int = 100
-    rate_limit_index: int = 10
-    rate_limit_global: int = 1000
+    rate_limit_index: int = 50
+    rate_limit_global: int = 500
     rate_limit_window_ms: int = 1000
     rate_limit_redis_ttl: int = 2
 
