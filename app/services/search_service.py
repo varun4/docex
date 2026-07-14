@@ -1,6 +1,6 @@
 import hashlib
 
-import asyncpg
+from elasticsearch import AsyncElasticsearch
 
 from app.config import Settings
 from app.metrics import CACHE_OPS
@@ -14,13 +14,13 @@ settings = Settings()
 class SearchService:
     def __init__(
         self,
-        db_pool: asyncpg.Pool,
+        es: AsyncElasticsearch,
         cache: CacheRepository,
         doc_repo: DocumentRepository | None = None,
     ):
-        self.db_pool = db_pool
+        self.es = es
         self.cache = cache
-        self.doc_repo = doc_repo or DocumentRepository()
+        self.doc_repo = doc_repo or DocumentRepository(es)
 
     async def search(
         self,
@@ -40,8 +40,7 @@ class SearchService:
         limit = min(size, settings.search_max_size)
         offset = (page - 1) * limit
 
-        async with self.db_pool.acquire() as conn:
-            results, total = await self.doc_repo.search(conn, tenant_id, query, limit, offset)
+        results, total = await self.doc_repo.search(tenant_id, query, offset, limit)
 
         response = SearchResponse(results=results, total=total, page=page, size=limit)
         await self.cache.set_search_results(tenant_id, key_hash, response, settings.cache_ttl_search)

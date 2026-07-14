@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from app.config import Settings
-from app.dependencies import get_db_pool, get_redis, get_tenant_id, rate_limit
+from app.dependencies import get_elasticsearch, get_redis, get_tenant_id, rate_limit
 from app.repositories.cache_repository import CacheRepository
 from app.schemas.search import SearchResponse
 from app.services.search_service import SearchService
@@ -11,10 +11,10 @@ settings = Settings()
 
 
 def get_search_service(
-    db_pool=Depends(get_db_pool),
+    es=Depends(get_elasticsearch),
     redis=Depends(get_redis),
 ) -> SearchService:
-    return SearchService(db_pool, CacheRepository(redis))
+    return SearchService(es, CacheRepository(redis))
 
 
 @router.get("", response_model=SearchResponse)

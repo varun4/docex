@@ -1,11 +1,11 @@
 # DocEx — Distributed Document Search Service
 
-A prototype distributed document search service with multi-tenancy, full-text search, caching, and rate limiting. Built with FastAPI, PostgreSQL FTS, and Redis.
+A prototype distributed document search service with multi-tenancy, full-text search, async ingest pipeline, caching, and rate limiting. Built with FastAPI, Elasticsearch, Apache Kafka, and Redis.
 
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/engine/install/) + [Docker Compose](https://docs.docker.com/compose/install/)
-- Internet connection (for initial seed data fetch and image pulls)
+- Internet connection (for image pulls and initial seed data)
 
 ## Quick Start
 
@@ -15,28 +15,33 @@ git clone <repo-url>
 cd docex
 cp .env.example .env
 
-# 2. Start infrastructure (PostgreSQL + Redis)
-docker compose up -d postgres redis
+# 2. Start all infrastructure
+docker compose up -d
 
-# 3. Create database schema
+# 3. Create database schema (outbox table)
 docker compose run app python scripts/init_db.py
 
-# 4. Fetch seed data from Stardew Valley Wiki (~2,800 articles)
+# 4. Create Elasticsearch index
+docker compose run app python scripts/init_es.py
+
+# 5. (Optional) Seed data from Stardew Valley Wiki (~2,800 articles)
 docker compose run app python scripts/seed.py --output data/seed.jsonl
 
-# 5. Import seed data directly into PostgreSQL
-docker compose run app python scripts/bulk_import.py data/seed.jsonl \
-  --db-url postgresql://docsextract:docsextract@postgres:5432/docex
-
-# 6. Start the API server with live reload
-docker compose up app
+# 6. (Optional) Import seed data via API
+docker compose run app python scripts/bulk_import.py data/seed.jsonl --api http://app:8000 --tenant stardewvalley
 ```
 
-The API is now available at `http://localhost:8000`.
+The API is available at `http://localhost:8000`. Documents are ingested asynchronously — `POST /documents` returns immediately with an `event_id`, and the consumer process indexes into Elasticsearch in the background.
 
 ## Usage
 
 ```bash
+# Index a document (async — returns 202 with event_id)
+curl -X POST "http://localhost:8000/documents" \
+  -H "X-Tenant-ID: stardewvalley" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Stardrop", "content": "A rare fruit that empowers those who eat it."}'
+
 # Search documents
 curl "http://localhost:8000/search?q=stardrop&page=1&size=10" \
   -H "X-Tenant-ID: stardewvalley"
@@ -59,7 +64,8 @@ curl http://localhost:8000/health
 |---|---|
 | `scripts/seed.py` | Fetches pages from a MediaWiki API → JSONL |
 | `scripts/bulk_import.py` | Imports JSONL → API (`--api`) or direct to DB (`--db-url`) |
-| `scripts/init_db.py` | Creates/updates database schema (idempotent) |
+| `scripts/init_db.py` | Creates/updates PostgreSQL outbox schema (idempotent) |
+| `scripts/init_es.py` | Creates Elasticsearch index with mapping (idempotent) |
 
 ## Project Structure
 
@@ -71,28 +77,46 @@ docex/
 │   ├── routers/            # API endpoints
 │   ├── schemas/            # Pydantic models
 │   ├── services/           # Business logic
-│   └── repositories/       # Data access (PostgreSQL + Redis)
+│   ├── repositories/       # Data access (ES + Redis + PG outbox)
+│   └── kafka/              # Async Kafka producer
+├── consumer/               # Background worker (separate process)
+│   ├── main.py             # Kafka consumer loop
+│   └── indexer.py          # ES indexer + cache warmer
 ├── scripts/                # Utility scripts
 │   ├── seed.py
 │   ├── bulk_import.py
-│   └── init_db.py
+│   ├── init_db.py
+│   └── init_es.py
 ├── data/                   # Generated seed data (gitignored)
 ├── docker-compose.yml
 ├── Dockerfile
+├── Dockerfile.consumer
 └── requirements.txt
 ```
 
 ## API Endpoints
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/documents` | `X-Tenant-ID` | Index a new document |
-| GET | `/search?q=&page=&size=` | `X-Tenant-ID` | Full-text search |
-| GET | `/documents/{id}` | `X-Tenant-ID` | Get document details |
-| DELETE | `/documents/{id}` | `X-Tenant-ID` | Delete a document |
-| GET | `/health` | — | Health check with dependency status |
-| POST | `/documents/bulk` | `X-Tenant-ID` | Bulk index documents |
-| GET | `/metrics` | — | Prometheus metrics (request count, duration, cache hit ratio, errors, pool size) |
+| Method | Path | Auth | Response | Description |
+|---|---|---|---|---|
+| POST | `/documents` | `X-Tenant-ID` | `202 {id, event_id, status: "pending"}` | Async document ingest |
+| GET | `/search?q=&page=&size=` | `X-Tenant-ID` | `200 {results[], total, page, size}` | Full-text search via Elasticsearch |
+| GET | `/documents/{id}` | `X-Tenant-ID` | `200` document / `404` | Retrieve document from ES |
+| DELETE | `/documents/{id}` | `X-Tenant-ID` | `200` / `404` | Delete document from ES |
+| GET | `/health` | — | `200` / `503` | Health check (PG, Redis, ES, Kafka) |
+
+## Architecture
+
+```
+API ──▶ PG Outbox ──▶ Kafka ──▶ Consumer ──▶ Elasticsearch
+                                   │
+                                   └──▶ Redis (cache warm)
+```
+
+- **Elasticsearch**: Document store + search index
+- **PostgreSQL**: Outbox table only (event journal)
+- **Kafka**: Event stream, partitioned by tenant_id
+- **Redis**: Read cache (configurable TTL) + rate limiter
+- **Consumer**: Background worker (independently scalable)
 
 ## Production Readiness
 
@@ -104,8 +128,8 @@ Features implemented to improve production readiness:
 | **Rate limit headers** | `X-RateLimit-Limit` and `X-RateLimit-Remaining` returned on all rate-limited routes |
 | **Prometheus metrics** | `/metrics` endpoint exposes request counts, duration histogram, cache hit/miss, connection pool size, and error counts |
 | **Structured error codes** | All errors use `ErrorCode` enum (`/app/enums.py`), returned as `{"error": {"code": ..., "message": ..., "detail": ...}}` |
-| **Configurable via env** | Rate limits, cache TTLs, pool sizes, FTS language, and feature flags all configurable through `.env` |
-| **Bulk indexing** | `POST /documents/bulk` for batch document ingestion |
+| **Configurable via env** | Rate limits, cache TTLs, pool sizes, ES/Kafka settings all configurable through `.env` |
+| **Async ingest** | Outbox + Kafka + consumer decouples ingest from search indexing |
 | **Graceful degradation** | Health check reports per-dependency status with latency |
 
 See `.env.example` for all available configuration options.

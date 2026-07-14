@@ -1,7 +1,6 @@
-import json
 import uuid
 
-import asyncpg
+from elasticsearch import AsyncElasticsearch
 
 from app.config import Settings
 from app.schemas.documents import DocumentResponse
@@ -11,103 +10,126 @@ settings = Settings()
 
 
 class DocumentRepository:
-    async def create(
+    def __init__(self, es: AsyncElasticsearch):
+        self.es = es
+
+    async def index_document(
         self,
-        conn: asyncpg.Connection,
         tenant_id: str,
+        doc_id: uuid.UUID,
         title: str,
         content: str,
         metadata: dict | None = None,
-    ) -> DocumentResponse:
-        row = await conn.fetchrow(
-            """
-            INSERT INTO documents (id, tenant_id, title, content, metadata)
-            VALUES ($1, $2, $3, $4, $5::jsonb)
-            RETURNING id, tenant_id, title, content, metadata, created_at, updated_at
-            """,
-            uuid.uuid4(),
-            tenant_id,
-            title,
-            content,
-            json.dumps(metadata or {}),
+    ) -> dict:
+        body = {
+            "doc_id": str(doc_id),
+            "tenant_id": tenant_id,
+            "title": title,
+            "content": content,
+            "metadata": metadata or {},
+        }
+        await self.es.index(
+            index=settings.es_index_name,
+            id=str(doc_id),
+            body=body,
+            refresh="wait_for",
         )
-        data = dict(row)
-        if isinstance(data.get("metadata"), str):
-            data["metadata"] = json.loads(data["metadata"])
-        return DocumentResponse(**data)
+        return body
 
     async def get_by_id(
         self,
-        conn: asyncpg.Connection,
         tenant_id: str,
         doc_id: uuid.UUID,
     ) -> DocumentResponse | None:
-        row = await conn.fetchrow(
-            """
-            SELECT id, tenant_id, title, content, metadata, created_at, updated_at
-            FROM documents
-            WHERE id = $1 AND tenant_id = $2
-            """,
-            doc_id,
-            tenant_id,
-        )
-        if row:
-            data = dict(row)
-            if isinstance(data.get("metadata"), str):
-                data["metadata"] = json.loads(data["metadata"])
-            return DocumentResponse(**data)
-        return None
+        try:
+            result = await self.es.get(
+                index=settings.es_index_name,
+                id=str(doc_id),
+            )
+        except Exception:
+            return None
+
+        source = result["_source"]
+        if source.get("tenant_id") != tenant_id:
+            return None
+
+        return DocumentResponse.model_validate({
+            "id": doc_id,
+            "title": source["title"],
+            "content": source["content"],
+            "metadata": source.get("metadata", {}),
+            "created_at": source.get("created_at"),
+            "updated_at": source.get("updated_at"),
+        })
 
     async def delete(
         self,
-        conn: asyncpg.Connection,
         tenant_id: str,
         doc_id: uuid.UUID,
     ) -> bool:
-        result = await conn.execute(
-            "DELETE FROM documents WHERE id = $1 AND tenant_id = $2",
-            doc_id,
-            tenant_id,
+        try:
+            doc = await self.es.get(
+                index=settings.es_index_name,
+                id=str(doc_id),
+            )
+        except Exception:
+            return False
+
+        source = doc["_source"]
+        if source.get("tenant_id") != tenant_id:
+            return False
+
+        await self.es.delete(
+            index=settings.es_index_name,
+            id=str(doc_id),
+            refresh="wait_for",
         )
-        return result != "DELETE 0"
+        return True
 
     async def search(
         self,
-        conn: asyncpg.Connection,
         tenant_id: str,
         query: str,
-        limit: int,
-        offset: int,
+        from_: int,
+        size: int,
     ) -> tuple[list[SearchResult], int]:
-        tsq = f"websearch_to_tsquery('{settings.fts_language}', $2)"
+        body = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"term": {"tenant_id": tenant_id}},
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": ["title^2", "content"],
+                                "type": "best_fields",
+                            }
+                        },
+                    ]
+                }
+            },
+            "from": from_,
+            "size": size,
+        }
 
-        total = await conn.fetchval(
-            f"""
-            SELECT count(*)
-            FROM documents
-            WHERE tenant_id = $1
-              AND search_vector @@ {tsq}
-              AND content NOT ILIKE 'REDIRECT%'
-            """,
-            tenant_id,
-            query,
+        result = await self.es.search(
+            index=settings.es_index_name,
+            body=body,
         )
 
-        rows = await conn.fetch(
-            f"""
-            SELECT id, title,
-                   ts_rank('{settings.fts_rank_weights}'::float4[], search_vector, {tsq}, $3) AS rank
-            FROM documents
-            WHERE tenant_id = $1
-              AND search_vector @@ {tsq}
-              AND content NOT ILIKE 'REDIRECT%'
-            ORDER BY rank DESC
-            LIMIT $4 OFFSET $5
-            """,
-            tenant_id,
-            query,
-            settings.fts_rank_normalization,
-            limit,
-            offset,
-        )
-        return [SearchResult(**dict(r)) for r in rows], total
+        total = result["hits"]["total"]["value"]
+        results = [
+            SearchResult(
+                id=hit["_source"]["doc_id"],
+                title=hit["_source"]["title"],
+                rank=hit["_score"],
+            )
+            for hit in result["hits"]["hits"]
+        ]
+        return results, total
+
+    async def ping(self) -> bool:
+        try:
+            return await self.es.ping()
+        except Exception:
+            return False

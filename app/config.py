@@ -4,6 +4,12 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     database_url: str = "postgresql://docsextract:docsextract@localhost:5432/docex"
     redis_url: str = "redis://localhost:6379/0"
+    elasticsearch_url: str = "http://localhost:9200"
+    es_index_name: str = "documents"
+
+    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_topic: str = "documents.ingest"
+    kafka_group_id: str = "documents-ingest-consumer"
 
     rate_limit_search: int = 100
     rate_limit_index: int = 10
@@ -23,10 +29,6 @@ class Settings(BaseSettings):
     search_default_page: int = 1
     search_default_size: int = 20
     search_max_size: int = 100
-
-    fts_language: str = "english"
-    fts_rank_normalization: int = 0
-    fts_rank_weights: str = "{0.05,0.05,0.05,1.0}"
 
     debug: bool = False
     redis_decode_responses: bool = True

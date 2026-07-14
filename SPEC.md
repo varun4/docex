@@ -2,26 +2,28 @@
 
 ## Tech Stack
 - **Framework**: FastAPI (Python 3.11+)
-- **Search Engine**: PostgreSQL Full-Text Search (tsvector + GIN index)
+- **Search Engine**: Elasticsearch 8.x
+- **Event Bus**: Apache Kafka
 - **Cache & Rate Limiting**: Redis (via Docker)
-- **Orchestration**: Docker Compose (app + postgres + redis)
+- **Outbox Store**: PostgreSQL 16 (event journal only)
+- **Orchestration**: Docker Compose (app + consumer + postgres + redis + kafka + elasticsearch)
 
 ---
 
-## Architecture (Prototype)
-
-Single FastAPI service handling REST API with three backing services:
+## Architecture
 
 ```
-┌─────────────┐     ┌──────────┐     ┌──────────┐
-│  FastAPI App │────▶│ Postgres │────▶│  Redis   │
-│  (:8000)     │     │ (:5432)  │     │ (:6379)  │
-└─────────────┘     └──────────┘     └──────────┘
-       │                                  │
-       │  Health checks                   │
-       ▼                                  ▼
-   /health                            Cache + Rate
-   endpoint                           Limiter + Queue
+┌──────────┐    ┌──────────┐    ┌───────────┐    ┌──────────────┐
+│ FastAPI   │───▶│ Postgres │───▶│  Kafka    │───▶│  Consumer    │
+│ (:8000)   │    │ (outbox) │    │ (event bus)│    │  (worker)    │
+└─────┬────┘    └──────────┘    └───────────┘    └──────┬───────┘
+      │                                                  │
+      ▼                                                  ▼
+┌──────────┐                                    ┌──────────────┐
+│  Redis   │                                    │ Elasticsearch │
+│ (cache)  │                                    │ (:9200)      │
+└──────────┘                                    │ (store+search)│
+                                                 └──────────────┘
 ```
 
 ---
@@ -30,11 +32,11 @@ Single FastAPI service handling REST API with three backing services:
 
 | Method | Endpoint | Auth Header | Request Body | Response |
 |--------|----------|-------------|--------------|----------|
-| POST | `/documents` | `X-Tenant-ID` | `{id?, title, content, metadata?}` | `{id, status}` |
+| POST | `/documents` | `X-Tenant-ID` | `{id?, title, content, metadata?}` | `202 {id, event_id, status: "pending"}` |
 | GET | `/search?q={query}&page=1&size=20` | `X-Tenant-ID` | — | `{results[], total, page, size}` |
 | GET | `/documents/{id}` | `X-Tenant-ID` | — | `{id, title, content, metadata, created_at, updated_at}` |
 | DELETE | `/documents/{id}` | `X-Tenant-ID` | — | `{status}` |
-| GET | `/health` | — | — | `{status, dependencies: {postgres, redis}}` |
+| GET | `/health` | — | — | `{status, version, dependencies}` |
 
 ### Document Schema (Request/Response)
 ```json
@@ -46,30 +48,80 @@ Single FastAPI service handling REST API with three backing services:
 }
 ```
 
+### Ingest Response
+```json
+{
+  "id": "uuid",
+  "event_id": "uuid",
+  "status": "pending"
+}
+```
+
 ---
 
-## Database Schema
+## Outbox Schema (PostgreSQL)
 
 ```sql
-CREATE TABLE documents (
+CREATE TABLE document_events (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id    UUID NOT NULL DEFAULT gen_random_uuid(),
     tenant_id   TEXT NOT NULL,
+    doc_id      UUID,
     title       TEXT NOT NULL,
     content     TEXT NOT NULL,
     metadata    JSONB DEFAULT '{}',
-    search_vector tsvector GENERATED ALWAYS AS (
-        to_tsvector('english', coalesce(title, '') || ' ' || coalesce(content, ''))
-    ) STORED,
+    event_type  TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    error       TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    processed_at TIMESTAMPTZ
 );
+```
 
-CREATE INDEX idx_documents_search
-    ON documents
-    USING GIN (search_vector);
+---
 
-CREATE INDEX idx_documents_tenant
-    ON documents (tenant_id, id);
+## Elasticsearch Index Mapping
+
+```json
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 1
+  },
+  "mappings": {
+    "properties": {
+      "doc_id":       { "type": "keyword" },
+      "tenant_id":    { "type": "keyword" },
+      "title":        { "type": "text", "analyzer": "english" },
+      "content":      { "type": "text", "analyzer": "english" },
+      "metadata":     { "type": "object", "enabled": false },
+      "created_at":   { "type": "date" },
+      "updated_at":   { "type": "date" }
+    }
+  }
+}
+```
+
+---
+
+## Kafka Topics
+
+| Topic | Partitions | Key | Retention |
+|---|---|---|---|
+| `documents.ingest` | 3 | `tenant_id` | 7 days |
+
+### Event Schema
+```json
+{
+  "event_id": "uuid",
+  "event_type": "create | update | delete",
+  "tenant_id": "tenant_123",
+  "doc_id": "uuid",
+  "title": "string",
+  "content": "text",
+  "metadata": {},
+  "timestamp": "ISO8601"
+}
 ```
 
 ---
@@ -77,8 +129,9 @@ CREATE INDEX idx_documents_tenant
 ## Multi-Tenancy
 
 - **Header-based**: `X-Tenant-ID` header required on every authenticated request.
-- All queries include `WHERE tenant_id = :tenant_id` to enforce isolation.
-- No cross-tenant data leakage.
+- ES: tenant-scoped via `term` filter on `tenant_id` keyword.
+- Kafka: partitioned by `tenant_id` key for ordered per-tenant processing.
+- Cache: namespaced per tenant (`doc:{tenant}:{id}`).
 
 ---
 
@@ -86,9 +139,8 @@ CREATE INDEX idx_documents_tenant
 
 | Cache | Key Pattern | TTL | Invalidation |
 |-------|------------|-----|-------------|
-| Document detail | `doc:{tenant}:{id}` | 5 min | On UPDATE / DELETE |
-| Search results | `search:{tenant}:{query_hash}:{page}:{size}` | 1 min | On new document index |
-| Rate limiter | `ratelimit:{tenant}:{endpoint_group}` | Sliding window | Automatic (1s windows) |
+| Document detail | `doc:{tenant}:{id}` | configurable (default 5 min) | On UPDATE / DELETE |
+| Search results | `search:{tenant}:{hash(query,page,size)}` | configurable (default 1 min) | On new document index |
 
 ---
 
@@ -101,19 +153,12 @@ CREATE INDEX idx_documents_tenant
 
 ---
 
-## Async Indexing
-
-- `POST /documents` can be synchronous (direct DB write) or asynchronous (via Redis queue).
-- Async path: job enqueued → immediate `202 {status: "pending"}` response → background worker consumes queue → writes to PostgreSQL → updates cache.
-- Default: synchronous for simplicity; async configurable.
-
----
-
 ## Consistency Model
 
-- **Strong consistency** for direct CRUD (`GET`/`DELETE`/sync `POST`).
-- **Eventual consistency** for async indexing path (queue-based).
-- Search index is **near-real-time**: PostgreSQL FTS is updated on commit.
+- **Write consistency**: Eventual (async via outbox + Kafka → ES)
+- **Search freshness**: Near-real-time (seconds of lag)
+- **Cache consistency**: Best-effort with configurable TTL
+- **Outbox reliability**: At-least-once delivery (idempotent consumer)
 
 ---
 
@@ -131,7 +176,7 @@ All errors return a standardized JSON envelope:
 }
 ```
 
-HTTP status codes used: `200`, `201`, `202`, `400`, `401`, `404`, `429`, `500`, `503`.
+HTTP status codes used: `200`, `202`, `400`, `401`, `404`, `429`, `500`, `503`.
 
 ---
 
@@ -144,7 +189,9 @@ HTTP status codes used: `200`, `201`, `202`, `400`, `401`, `404`, `429`, `500`, 
   "version": "0.1.0",
   "dependencies": {
     "postgres": { "status": "up", "latency_ms": 2 },
-    "redis": { "status": "up", "latency_ms": 1 }
+    "redis": { "status": "up", "latency_ms": 1 },
+    "elasticsearch": { "status": "up", "latency_ms": 3 },
+    "kafka": { "status": "up", "latency_ms": 5 }
   }
 }
 ```

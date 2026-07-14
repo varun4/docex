@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create the database schema if it doesn't exist."""
+"""Create the outbox schema if it doesn't exist."""
 
 import argparse
 import asyncio
@@ -18,34 +18,32 @@ logging.basicConfig(
 log = logging.getLogger("init_db")
 settings = Settings()
 
-
-def make_schema(fts_language: str) -> str:
-    return f"""
-CREATE TABLE IF NOT EXISTS documents (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id   TEXT NOT NULL,
-    title       TEXT NOT NULL,
-    content     TEXT NOT NULL,
-    metadata    JSONB DEFAULT '{{}}',
-    search_vector tsvector GENERATED ALWAYS AS (
-        setweight(to_tsvector('{fts_language}', coalesce(title, '')), 'A') ||
-        setweight(to_tsvector('{fts_language}', coalesce(content, '')), 'B')
-    ) STORED,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS document_events (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id     UUID NOT NULL DEFAULT gen_random_uuid(),
+    tenant_id    TEXT NOT NULL,
+    doc_id       UUID,
+    title        TEXT NOT NULL,
+    content      TEXT NOT NULL,
+    metadata     JSONB DEFAULT '{}',
+    event_type   TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'pending',
+    error        TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processed_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_documents_search
-    ON documents
-    USING GIN (search_vector);
+CREATE INDEX IF NOT EXISTS idx_outbox_status
+    ON document_events (status, created_at);
 
-CREATE INDEX IF NOT EXISTS idx_documents_tenant
-    ON documents (tenant_id, id);
+CREATE INDEX IF NOT EXISTS idx_outbox_tenant
+    ON document_events (tenant_id, event_id);
 """
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Initialize the database schema")
+    parser = argparse.ArgumentParser(description="Initialize the outbox schema")
     parser.add_argument(
         "--db-url",
         default=os.getenv("DATABASE_URL", settings.database_url),
@@ -56,8 +54,8 @@ async def main():
     log.info("Connecting to %s", args.db_url)
     conn = await asyncpg.connect(args.db_url)
     try:
-        await conn.execute(make_schema(settings.fts_language))
-        log.info("Schema created successfully (fts_language=%s)", settings.fts_language)
+        await conn.execute(SCHEMA_SQL)
+        log.info("Outbox schema created successfully")
     finally:
         await conn.close()
 

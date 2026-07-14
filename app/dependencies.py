@@ -29,6 +29,14 @@ async def get_redis(request: Request):
     return request.app.state.redis
 
 
+async def get_elasticsearch(request: Request):
+    return request.app.state.es
+
+
+async def get_kafka_producer(request: Request):
+    return request.app.state.kafka_producer
+
+
 def rate_limit(group: str, max_rps: int):
     async def check(
         redis=Depends(get_redis),

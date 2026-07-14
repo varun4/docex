@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 
 import asyncpg
 import redis.asyncio as aioredis
+from aiokafka import AIOKafkaProducer
+from elasticsearch import AsyncElasticsearch
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -22,14 +24,21 @@ async def lifespan(app: FastAPI):
     )
     DB_POOL_SIZE.set(settings.db_pool_max_size)
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=settings.redis_decode_responses)
+    app.state.es = AsyncElasticsearch(settings.elasticsearch_url)
+    app.state.kafka_producer = AIOKafkaProducer(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+    )
+    await app.state.kafka_producer.start()
     yield
     await app.state.db_pool.close()
     await app.state.redis.close()
+    await app.state.es.close()
+    await app.state.kafka_producer.stop()
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="DocExtract",
+        title="DocEx",
         version=settings.version,
         lifespan=lifespan,
     )

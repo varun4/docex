@@ -17,3 +17,9 @@ class DocumentResponse(BaseModel):
     metadata: dict = {}
     created_at: datetime
     updated_at: datetime
+
+
+class IngestResponse(BaseModel):
+    id: UUID
+    event_id: UUID
+    status: str = "pending"

@@ -6,3 +6,5 @@ asyncpg>=0.30.0
 redis>=5.2.0
 httpx>=0.27.0
 prometheus-client>=0.25.0
+elasticsearch[async]>=8.0.0,<9.0.0
+aiokafka>=0.12.0
