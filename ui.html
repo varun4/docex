@@ -185,7 +185,7 @@ async function search(e) {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${r.rank.toFixed(2)}</td><td>${esc(r.title)}</td><td><code>${r.id}</code></td>`;
       tr.style.cursor = 'pointer';
-      tr.onclick = () => { $('get-id').value = r.id; showTab('get'); };
+      tr.onclick = () => { $('get-id').value = r.id; showTab('get'); getDoc(); };
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -194,7 +194,7 @@ async function search(e) {
 }
 
 async function getDoc(e) {
-  e.preventDefault();
+  if (e) e.preventDefault();
   const id = $('get-id').value;
   const resp = await api('GET', `/documents/${id}`);
   const view = $('doc-view');
