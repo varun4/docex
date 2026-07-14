@@ -118,10 +118,11 @@ services:
   caddy:
     image: caddy:2-alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - "${CADDY_HTTP_PORT:-8080}:80"
+      - "${CADDY_HTTPS_PORT:-8443}:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./ui.html:/usr/share/caddy/index.html
       - caddy_data:/data
       - caddy_config:/config
     environment:

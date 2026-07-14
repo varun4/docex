@@ -2,10 +2,13 @@
     admin off
 }
 
-:80 {
-    reverse_proxy app:8000
-}
+:80, :8080 {
+    root * /usr/share/caddy
 
-{$DOMAIN} {
-    reverse_proxy app:8000
+    @api {
+        path /documents* /search* /health* /metrics* /openapi*
+    }
+    reverse_proxy @api app:8000
+
+    file_server
 }

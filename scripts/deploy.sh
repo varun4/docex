@@ -77,12 +77,31 @@ if [ ! -f .env.generated ]; then
     echo "Generated random PG_PASSWORD"
 fi
 
-# Set DOMAIN / EMAIL
+# Set DOMAIN / EMAIL / production Caddy ports
 if [ -n "$DOMAIN" ]; then
-    if grep -q "^DOMAIN=" .env; then
-        sed -i "s/^DOMAIN=.*/DOMAIN=$DOMAIN/" .env
-    else
-        echo "DOMAIN=$DOMAIN" >> .env
+    for var in "DOMAIN=$DOMAIN" "CADDY_HTTP_PORT=80" "CADDY_HTTPS_PORT=443"; do
+        key="${var%%=*}"
+        if grep -q "^${key}=" .env; then
+            sed -i "s/^${key}=.*/${var}/" .env
+        else
+            echo "${var}" >> .env
+        fi
+    done
+    # Append the {$DOMAIN} server block to Caddyfile for TLS
+    if ! grep -q "{$DOMAIN}" Caddyfile; then
+        cat >> Caddyfile << EOF
+
+{$DOMAIN} {
+    root * /usr/share/caddy
+
+    @api {
+        path /documents* /search* /health* /metrics* /openapi*
+    }
+    reverse_proxy @api app:8000
+
+    file_server
+}
+EOF
     fi
 fi
 if [ -n "$EMAIL" ]; then
@@ -142,18 +161,21 @@ echo "  DocEx is running!"
 echo ""
 
 if [ -n "$DOMAIN" ]; then
-    echo "  https://$DOMAIN"
+    echo "  UI:      https://$DOMAIN"
+    echo "  API:     https://$DOMAIN/health"
     echo ""
     echo "  HTTPS will be available once DNS propagates"
     echo "  and Let's Encrypt issues a certificate."
 else
     IP=$(curl -sf http://checkip.amazonaws.com 2>/dev/null || echo "<SERVER_IP>")
-    echo "  http://$IP:8000"
+    HTTP_PORT="${CADDY_HTTP_PORT:-8080}"
+    echo "  UI:      http://$IP:$HTTP_PORT"
+    echo "  API:     http://$IP:$HTTP_PORT/health"
+    echo "  Direct:  http://$IP:8000"
 fi
 
 echo ""
-echo "  Health:  curl http://localhost:8000/health"
-echo "  Search:  curl -H 'X-Tenant-ID: stardewvalley' 'http://localhost:8000/search?q=stardrop'"
+echo "  Search:  curl -H 'X-Tenant-ID: stardewvalley' 'http://localhost:8080/search?q=stardrop'"
 echo ""
 echo "  docker compose logs --tail=20 -f"
 echo "============================================"
