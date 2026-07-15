@@ -77,15 +77,14 @@ curl http://localhost/api/v1/health
 ```
 
 ## Scripts
-```
-| Script | Purpose |
-|---|---|---|
-| `scripts/deploy.sh` | Bootstrap script — installs Docker, configures, starts services, inits DB/ES, seeds data |
-| `scripts/seed.py` | Fetches pages from a MediaWiki API → JSONL |
-| `scripts/bulk_import.py` | Imports JSONL → API (`--api`), with `--rate` throttle |
-| `scripts/init_db.py` | Creates/updates PostgreSQL outbox schema (idempotent) |
-| `scripts/init_es.py` | Creates Elasticsearch index with mapping (idempotent) |
-```
+
+| Script | Description | Run via | Key flags |
+|--------|-------------|---------|-----------|
+| `scripts/deploy.sh` | Full bootstrap — installs Docker, configures `.env`, starts services, inits DB/ES, optionally seeds data | `./scripts/deploy.sh` (host) | `--domain`, `--email`, `--seed` |
+| `scripts/seed.py` | Fetch pages from a MediaWiki API and save as JSONL | `docker compose run --rm app python scripts/seed.py` | `--output`, `--api` |
+| `scripts/bulk_import.py` | Import JSONL documents into the API with rate-throttled batch POSTs | `docker compose run --rm app python scripts/bulk_import.py` | `--api`, `--tenant`, `--rate`, `--batch` |
+| `scripts/init_db.py` | Create/update PostgreSQL outbox schema (idempotent) | `docker compose run --rm app python scripts/init_db.py` | `--db-url` |
+| `scripts/init_es.py` | Create Elasticsearch index with document mapping (idempotent) | `docker compose run --rm app python scripts/init_es.py` | `--es-url` |
 
 ## Project Structure
 

@@ -68,3 +68,5 @@
 - [x] Single entry point: everything goes through Caddy on port 80/443
 - [x] End-to-end verified — all 9 endpoints pass through Caddy proxy
 - [x] deploy.sh now sources `.env` for DOMAIN/EMAIL — can set them in .env or pass via CLI (CLI overrides .env)
+- [x] README.md — scripts section converted to proper Markdown table with "Run via" and "Key flags" columns
+- [x] DEMO.md — comprehensive demo covering health, ingest, retrieval, search, delete, multi-tenancy, rate limiting, errors, metrics, and web UI
