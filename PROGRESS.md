@@ -70,3 +70,8 @@
 - [x] deploy.sh now sources `.env` for DOMAIN/EMAIL — can set them in .env or pass via CLI (CLI overrides .env)
 - [x] README.md — scripts section converted to proper Markdown table with "Run via" and "Key flags" columns
 - [x] DEMO.md — comprehensive demo covering health, ingest, retrieval, search, delete, multi-tenancy, rate limiting, errors, metrics, and web UI
+- [x] Add `EventStatus` enum to `app/enums.py` (PENDING, COMPLETED, FAILED)
+- [x] Replace all hardcoded event status strings with `EventStatus` enum across schemas, services, repositories, and consumer
+- [x] Add `GET /api/v1/documents/events/{event_id}` endpoint with tenant-isolated event status tracking
+- [x] Add `get_event_by_id` to OutboxRepository and `get_event_status` to DocumentService
+- [x] Document event tracking in DEMO.md and SPEC.md

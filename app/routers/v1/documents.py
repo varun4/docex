@@ -9,6 +9,7 @@ from app.config import Settings
 from app.dependencies import get_db_pool, get_elasticsearch, get_kafka_producer, get_redis, get_tenant_id, rate_limit
 from app.repositories.cache_repository import CacheRepository
 from app.schemas.documents import DeleteResponse, DocumentCreate, DocumentResponse, IngestResponse
+from app.schemas.events import EventStatusResponse
 from app.services.document_service import DocumentService
 
 router = APIRouter(tags=["documents"])
@@ -44,6 +45,20 @@ async def create_document(
             content=result.model_dump(mode="json"),
         )
     return result
+
+
+@router.get("/events/{event_id}", response_model=EventStatusResponse)
+async def get_event_status(
+    event_id: UUID,
+    tenant_id=Depends(get_tenant_id),
+    svc=Depends(get_doc_service),
+):
+    """Check the processing status of an ingest event.
+
+    Returns the current status (pending, completed, or failed) and an
+    optional error message if processing failed.
+    """
+    return await svc.get_event_status(tenant_id, event_id)
 
 
 @router.get("/{doc_id}", response_model=DocumentResponse)

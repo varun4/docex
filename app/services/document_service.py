@@ -8,7 +8,7 @@ from aiokafka import AIOKafkaProducer
 from elasticsearch import AsyncElasticsearch
 
 from app.config import Settings
-from app.enums import ErrorCode
+from app.enums import ErrorCode, EventStatus
 from app.exceptions import AppError
 from app.kafka.producer import publish_event
 from app.metrics import CACHE_OPS
@@ -17,7 +17,7 @@ from app.repositories.document_repository import DocumentRepository
 from app.repositories.hash_utils import compute_content_hash
 from app.repositories.outbox_repository import OutboxRepository
 from app.schemas.documents import DocumentResponse, IngestResponse
-from app.schemas.events import DocumentEvent
+from app.schemas.events import DocumentEvent, EventStatusResponse
 
 settings = Settings()
 
@@ -89,7 +89,7 @@ class DocumentService:
 
         await publish_event(self.kafka_producer, settings.kafka_topic, event)
 
-        return IngestResponse(id=doc_id, event_id=event.event_id, status="pending")
+        return IngestResponse(id=doc_id, event_id=event.event_id, status=EventStatus.PENDING)
 
     async def get(self, tenant_id: str, doc_id: str) -> DocumentResponse:
         """Retrieve a document by id with cache-aside (Redis → ES).
@@ -122,6 +122,36 @@ class DocumentService:
 
         await self.cache.set_document(tenant_id, doc_id, doc, settings.cache_ttl_doc)
         return doc
+
+    async def get_event_status(self, tenant_id: str, event_id: uuid.UUID) -> EventStatusResponse:
+        """Check the processing status of an ingest event.
+
+        Args:
+            tenant_id: Tenant namespace for access verification.
+            event_id: UUID of the event to check.
+
+        Returns:
+            EventStatusResponse with current status and optional error message.
+
+        Raises:
+            AppError: 404 if the event is not found or belongs to another tenant.
+        """
+        async with self.db_pool.acquire() as conn:
+            row = await self.outbox_repo.get_event_by_id(conn, event_id)
+
+        if not row or row["tenant_id"] != tenant_id:
+            raise AppError(
+                ErrorCode.NOT_FOUND,
+                "Event not found",
+                f"No event with id {event_id} for this tenant",
+                404,
+            )
+
+        return EventStatusResponse(
+            event_id=event_id,
+            status=EventStatus(row["status"]),
+            error=row.get("error"),
+        )
 
     async def delete(self, tenant_id: str, doc_id: str) -> None:
         """Delete a document from ES and evict cache entries.

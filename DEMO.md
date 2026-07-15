@@ -94,7 +94,40 @@ POST /api/v1/documents
 
 ---
 
-## 3. Document Retrieval
+## 3. Event Tracking
+
+After ingesting a document, you can poll the event status to know when processing completes:
+
+```bash
+# Ingest returns an event_id
+EVENT_ID=$(curl -s -X POST http://localhost/api/v1/documents \
+  -H "X-Tenant-ID: stardewvalley" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Tracked Doc", "content": "Watch me get indexed"}' | jq -r '.event_id')
+
+echo "Event ID: $EVENT_ID"
+
+# Poll until completed
+while true; do
+  STATUS=$(curl -s "http://localhost/api/v1/documents/events/$EVENT_ID" \
+    -H "X-Tenant-ID: stardewvalley" | jq -r '.status')
+  echo "Status: $STATUS"
+  if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
+    break
+  fi
+  sleep 1
+done
+```
+
+Expected poll sequence:
+```json
+{ "event_id": "...", "status": "pending",  "error": null }   ← initial
+{ "event_id": "...", "status": "completed", "error": null }  ← after consumer processes
+```
+
+If processing fails, `status` is `"failed"` and `error` contains the reason.
+
+## 4. Document Retrieval
 
 Once the consumer has indexed the document (typically < 1 second), retrieve it by ID:
 
@@ -134,7 +167,7 @@ Try it twice — the second request hits Redis and is faster.
 
 ---
 
-## 4. Full-Text Search
+## 5. Full-Text Search
 
 Search across all documents for a tenant. Uses Elasticsearch `multi_match` with title boost (2x):
 
@@ -176,7 +209,7 @@ curl -s "http://localhost/api/v1/search?q=fr&page=1&size=5" \
 
 ---
 
-## 5. Document Deletion
+## 6. Document Deletion
 
 Delete a document from Elasticsearch and evict its cache entries:
 
@@ -213,7 +246,7 @@ curl -s "http://localhost/api/v1/documents/$DOC_ID" \
 
 ---
 
-## 6. Multi-Tenancy
+## 7. Multi-Tenancy
 
 DocEx isolates data by tenant using the `X-Tenant-ID` header. Demonstrate with two tenants:
 
@@ -254,7 +287,7 @@ curl -s "http://localhost/api/v1/search?q=doc&size=10" \
 
 ---
 
-## 7. Rate Limiting
+## 8. Rate Limiting
 
 Rate limits are enforced via a sliding window counter in Redis. Defaults:
 - **Search**: 100 req/s per tenant
@@ -294,7 +327,7 @@ X-RateLimit-Remaining: 87
 
 ---
 
-## 8. Error Handling
+## 9. Error Handling
 
 All errors use a standardized JSON envelope with `ErrorCode` enum values.
 
@@ -352,7 +385,7 @@ curl -s -X POST http://localhost/api/v1/documents \
 
 ---
 
-## 9. Prometheus Metrics
+## 10. Prometheus Metrics
 
 DocEx exposes Prometheus metrics at `/api/v1/metrics`:
 
@@ -372,7 +405,7 @@ Available metrics:
 
 ---
 
-## 10. Web UI
+## 11. Web UI
 
 DocEx includes a lightweight web UI served by Caddy.
 

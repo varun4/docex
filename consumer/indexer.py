@@ -8,6 +8,7 @@ import redis.asyncio as aioredis
 from elasticsearch import AsyncElasticsearch
 
 from app.config import Settings
+from app.enums import EventStatus
 from app.repositories.hash_utils import compute_content_hash
 from app.schemas.documents import DocumentResponse
 from app.repositories.outbox_repository import OutboxRepository
@@ -42,7 +43,7 @@ class Indexer:
         For 'delete' events, removes the document from ES.
         For all other events, indexes into ES, warms the doc cache,
         invalidates the tenant's search cache, and marks the outbox
-        event as 'completed'. On failure, marks as 'failed'.
+        event as EventStatus.COMPLETED. On failure, marks as EventStatus.FAILED.
 
         Args:
             event_data: Deserialized Kafka message payload as a dict.
@@ -106,11 +107,11 @@ class Indexer:
                     break
 
             async with self.pg_pool.acquire() as conn:
-                await self.outbox_repo.update_status(conn, event_id, "completed")
+                await self.outbox_repo.update_status(conn, event_id, EventStatus.COMPLETED.value)
 
             log.info("Processed event %s (%s) for doc %s", event_id, event_type, doc_id)
 
         except Exception as e:
             log.error("Failed to process event %s: %s", event_id, e)
             async with self.pg_pool.acquire() as conn:
-                await self.outbox_repo.update_status(conn, event_id, "failed", str(e))
+                await self.outbox_repo.update_status(conn, event_id, EventStatus.FAILED.value, str(e))

@@ -10,3 +10,10 @@ class ErrorCode(str, Enum):
     RATE_LIMITED = "RATE_LIMITED"
     INTERNAL_ERROR = "INTERNAL_ERROR"
     VALIDATION_ERROR = "VALIDATION_ERROR"
+
+
+class EventStatus(str, Enum):
+    """Processing status for outbox document events."""
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"

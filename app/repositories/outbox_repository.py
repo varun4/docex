@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import asyncpg
 
+from app.enums import EventStatus
 from app.schemas.events import DocumentEvent
 
 
@@ -30,7 +31,7 @@ class OutboxRepository:
             content: Document body text.
             metadata: Optional JSON metadata.
             doc_id: Optional document UUID (generated if None).
-            event_type: Type of event ('create', 'update', 'delete').
+            event_type: Type of event (e.g. 'create', 'update', 'delete').
 
         Returns:
             A DocumentEvent model with the persisted event data.
@@ -76,7 +77,7 @@ class OutboxRepository:
         Args:
             conn: An active asyncpg connection.
             event_id: UUID of the event to update.
-            status: New status ('completed' or 'failed').
+            status: New EventStatus value (COMPLETED or FAILED).
             error: Optional error message if the event failed.
         """
         await conn.execute(
@@ -107,10 +108,35 @@ class OutboxRepository:
         rows = await conn.fetch(
             """
             SELECT * FROM document_events
-            WHERE status = 'pending'
+            WHERE status = $1
             ORDER BY created_at ASC
-            LIMIT $1
+            LIMIT $2
             """,
+            EventStatus.PENDING.value,
             limit,
         )
         return [dict(r) for r in rows]
+
+    async def get_event_by_id(
+        self,
+        conn: asyncpg.Connection,
+        event_id: uuid.UUID,
+    ) -> dict | None:
+        """Fetch a single event by its event_id, returning status and error info.
+
+        Args:
+            conn: An active asyncpg connection.
+            event_id: UUID of the event to retrieve.
+
+        Returns:
+            Event row as a dict, or None if not found.
+        """
+        row = await conn.fetchrow(
+            """
+            SELECT event_id, tenant_id, status, error, created_at, processed_at
+            FROM document_events
+            WHERE event_id = $1
+            """,
+            event_id,
+        )
+        return dict(row) if row else None

@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.enums import EventStatus
+
 
 class DocumentCreate(BaseModel):
     """Request body for creating a new document."""
@@ -30,7 +32,7 @@ class IngestResponse(BaseModel):
 
     id: UUID
     event_id: UUID
-    status: str = "pending"
+    status: EventStatus = EventStatus.PENDING
 
 
 class DeleteResponse(BaseModel):

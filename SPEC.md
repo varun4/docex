@@ -33,10 +33,12 @@
 | Method | Endpoint | Auth Header | Request Body | Response |
 |--------|----------|-------------|--------------|----------|
 | POST | `/api/v1/documents` | `X-Tenant-ID` | `{title, content, metadata?}` | `202 {id, event_id, status: "pending"}` |
+| GET | `/api/v1/documents/events/{event_id}` | `X-Tenant-ID` | — | `{event_id, status, error?}` |
 | GET | `/api/v1/search?q={query}&page=1&size=20` | `X-Tenant-ID` | — | `{results[], total, page, size}` |
 | GET | `/api/v1/documents/{id}` | `X-Tenant-ID` | — | `{id, title, content, metadata, created_at, updated_at}` |
 | DELETE | `/api/v1/documents/{id}` | `X-Tenant-ID` | — | `{status}` |
-| GET | `/health` | — | — | `{status, version, dependencies}` |
+| GET | `/api/v1/health` | — | — | `{status, version, dependencies}` |
+| GET | `/api/v1/metrics` | — | — | Prometheus text format |
 
 ### Document Schema (Request/Response)
 ```json

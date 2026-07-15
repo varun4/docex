@@ -1,9 +1,11 @@
-"""Kafka event model for document ingest messages."""
+"""Kafka event model for document ingest messages and event status responses."""
 
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel
+
+from app.enums import EventStatus
 
 
 class DocumentEvent(BaseModel):
@@ -17,3 +19,11 @@ class DocumentEvent(BaseModel):
     content: str
     metadata: dict = {}
     timestamp: datetime
+
+
+class EventStatusResponse(BaseModel):
+    """Response returned when checking the processing status of an ingest event."""
+
+    event_id: UUID
+    status: EventStatus
+    error: str | None = None
