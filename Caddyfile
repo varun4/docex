@@ -6,7 +6,7 @@
     root * /usr/share/caddy
 
     @api {
-        path /api/v1/documents* /api/v1/search* /api/v1/health* /api/v1/metrics* /openapi*
+        path /api/v1/documents* /api/v1/search* /api/v1/tenants* /api/v1/health* /api/v1/metrics* /openapi*
     }
     reverse_proxy @api app:8000
 

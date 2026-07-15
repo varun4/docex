@@ -5,7 +5,6 @@ import uuid
 from elasticsearch import AsyncElasticsearch
 
 from app.config import Settings
-from app.repositories.hash_utils import compute_content_hash
 from app.schemas.documents import DocumentResponse
 from app.schemas.search import SearchResult
 
@@ -222,6 +221,28 @@ class DocumentRepository:
             for hit in result["hits"]["hits"]
         ]
         return results, total
+
+    async def get_tenants(
+            self
+    ) -> list[str]:
+        body = {
+            "size": 0,
+            "aggs": {
+                "unique_tenants": {
+                    "terms": {
+                        "field": "tenant_id",
+                    }
+                }
+            }
+        }
+        result = await self.es.search(
+            index=settings.es_index_name,
+            body=body,
+        )
+
+        buckets = result["aggregations"]["unique_tenants"]["buckets"]
+        tenants = [bucket["key"] for bucket in buckets]
+        return tenants
 
     async def ping(self) -> bool:
         """Check Elasticsearch connectivity.
