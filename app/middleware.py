@@ -12,13 +12,13 @@ from app.metrics import REQUESTS, REQUEST_DURATION
 
 settings = Settings()
 
-SKIP_GLOBAL_RATE_LIMIT = {"/health", "/metrics"}
+SKIP_GLOBAL_RATE_LIMIT = {"/api/v1/health", "/api/v1/metrics"}
 
 
 async def global_rate_limit_middleware(request: Request, call_next):
     """Enforce a global rate limit (req/s) across all tenants before processing the request.
 
-    Skips /health and /metrics endpoints. Passes through to request_id_middleware.
+    Skips /api/v1/health and /api/v1/metrics endpoints. Passes through to request_id_middleware.
     """
     if request.url.path not in SKIP_GLOBAL_RATE_LIMIT:
         redis = getattr(request.app.state, "redis", None)

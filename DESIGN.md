@@ -63,9 +63,9 @@ Six containers via Docker Compose:
 ## 2. Component Breakdown
 
 ### Router Layer
-- **`routers/documents.py`** — `POST /documents`, `GET /documents/{id}`, `DELETE /documents/{id}`
-- **`routers/search.py`** — `GET /search`
-- **`routers/health.py`** — `GET /health`
+- **`routers/v1/documents.py`** — `POST /api/v1/documents`, `GET /api/v1/documents/{id}`, `DELETE /api/v1/documents/{id}`
+- **`routers/v1/search.py`** — `GET /api/v1/search`
+- **`routers/v1/health.py`** — `GET /api/v1/health`
 - Request validation via Pydantic schemas
 - Extracts `X-Tenant-ID` header via FastAPI dependency
 
@@ -449,20 +449,20 @@ docex/
 **`services/health_service.py`**:
 - `check()` → ping PG + Redis + ES + Kafka → aggregate → 200 or 503
 
-**`routers/documents.py`** — prefix `/documents`:
+**`routers/v1/documents.py`** — prefix `/api/v1/documents`:
 | Route | Depends | Returns |
 |---|---|---|
 | `POST /` | `get_tenant_id`, `rate_limit("index", 10)` | 202 IngestResponse |
 | `GET /{id}` | `get_tenant_id` | 200 DocumentResponse / 404 |
 | `DELETE /{id}` | `get_tenant_id`, `rate_limit("index", 10)` | 200 / 404 |
 
-**`routers/search.py`** — prefix `/search`:
+**`routers/v1/search.py`** — prefix `/api/v1/search`:
 | Route | Depends | Returns |
 |---|---|---|
 | `GET /` | `get_tenant_id`, `rate_limit("search", 100)` | 200 SearchResponse |
 | Query: `q` (required), `page` (default 1), `size` (default 20, max 100) | | |
 
-**`routers/health.py`** — prefix `/health`:
+**`routers/v1/health.py`** — prefix `/api/v1/health`:
 | Route | Depends | Returns |
 |---|---|---|
 | `GET /` | none | 200 HealthResponse / 503 |

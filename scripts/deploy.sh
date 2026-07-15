@@ -6,6 +6,9 @@ DOMAIN=""
 EMAIL=""
 SEED=false
 
+# Source .env if it exists (for DOMAIN, EMAIL, CADDY_HTTP_PORT, etc.)
+[ -f .env ] && . .env
+
 usage() {
     echo "Usage: $0 [--domain DOMAIN] [--email EMAIL] [--seed]"
     echo ""
@@ -87,15 +90,15 @@ if [ -n "$DOMAIN" ]; then
             echo "${var}" >> .env
         fi
     done
-    # Append the {$DOMAIN} server block to Caddyfile for TLS
-    if ! grep -q "{$DOMAIN}" Caddyfile; then
+    # Append domain server block to Caddyfile for TLS (idempotent)
+    if ! grep -q "^$DOMAIN {" Caddyfile; then
         cat >> Caddyfile << EOF
 
-{$DOMAIN} {
+$DOMAIN {
     root * /usr/share/caddy
 
     @api {
-        path /documents* /search* /health* /metrics* /openapi*
+        path /api/v1/documents* /api/v1/search* /api/v1/health* /api/v1/metrics* /openapi*
     }
     reverse_proxy @api app:8000
 
@@ -119,7 +122,7 @@ docker compose up -d --build
 # --- Wait for app to be healthy ---
 echo "Waiting for the API to become healthy..."
 for i in $(seq 1 60); do
-    if curl -sf http://localhost:8000/health >/dev/null 2>&1; then
+    if curl -sf http://localhost/api/v1/health >/dev/null 2>&1; then
         echo "API is healthy (attempt $i)"
         break
     fi
@@ -162,20 +165,19 @@ echo ""
 
 if [ -n "$DOMAIN" ]; then
     echo "  UI:      https://$DOMAIN"
-    echo "  API:     https://$DOMAIN/health"
+    echo "  API:     https://$DOMAIN/api/v1/health"
     echo ""
     echo "  HTTPS will be available once DNS propagates"
     echo "  and Let's Encrypt issues a certificate."
 else
     IP=$(curl -sf http://checkip.amazonaws.com 2>/dev/null || echo "<SERVER_IP>")
-    HTTP_PORT="${CADDY_HTTP_PORT:-8080}"
+    HTTP_PORT="${CADDY_HTTP_PORT:-80}"
     echo "  UI:      http://$IP:$HTTP_PORT"
-    echo "  API:     http://$IP:$HTTP_PORT/health"
-    echo "  Direct:  http://$IP:8000"
+    echo "  API:     http://$IP:$HTTP_PORT/api/v1/health"
 fi
 
 echo ""
-echo "  Search:  curl -H 'X-Tenant-ID: stardewvalley' 'http://localhost:8080/search?q=stardrop'"
+echo "  Search:  curl -H 'X-Tenant-ID: stardewvalley' 'http://localhost/api/v1/search?q=stardrop'"
 echo ""
 echo "  docker compose logs --tail=20 -f"
 echo "============================================"

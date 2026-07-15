@@ -22,9 +22,9 @@
 - [x] `app/services/document_service.py` — typed CRUD orchestration with outbox + Kafka ingest + cache-aside
 - [x] `app/services/search_service.py` — typed search with cache-aside (Redis → ES)
 - [x] `app/services/health_service.py` — typed health check (PG, Redis, ES, Kafka) with latency
-- [x] `app/routers/documents.py` — POST/GET/DELETE /documents with rate limiting
-- [x] `app/routers/search.py` — GET /search with rate limiting
-- [x] `app/routers/health.py` — GET /health (no auth, no rate limit)
+- [x] `app/routers/v1/documents.py` — POST/GET/DELETE /api/v1/documents with rate limiting
+- [x] `app/routers/v1/search.py` — GET /api/v1/search with rate limiting
+- [x] `app/routers/v1/health.py` — GET /api/v1/health (no auth, no rate limit)
 - [x] `app/middleware.py` — request ID, rate limit headers, metrics, global rate limiter
 - [x] `app/metrics.py` — Prometheus counters/histograms (requests, cache ops, errors, pool size)
 - [x] `consumer/main.py` — Kafka consumer loop (poll `documents.ingest` → indexer → outbox status update)
@@ -50,3 +50,21 @@
 ## 🎯 Housekeeping Fixes (Jul 2026)
 - [x] Add missing deps to `pyproject.toml` — `elasticsearch[async]`, `aiokafka`, `prometheus-client`
 - [x] Fix `.env` DB name — `docsextract` → `docex`
+
+## 🎯 API Versioning (Jul 2026)
+- [x] Move routers into versioned module: `app/routers/` → `app/routers/v1/` (documents, search, health, metrics)
+- [x] Register all routes under `/api/v1/` prefix via `app.include_router(prefix=...)` in `main.py`
+- [x] Update Caddyfile path matching, UI fetch paths, scripts, and all docs to reflect `/api/v1/` prefix
+- [x] Version is now purely a routing concern — adding v2 means creating `app/routers/v2/` and registering alongside v1
+
+## 🎯 Caddy Entry Point & FQDN Support (Jul 2026)
+- [x] Remove direct app port exposure (`ports: 8000:8000` removed from `docker-compose.yml`)
+- [x] Change Caddy defaults to standard ports (`80:80`, `443:443`)
+- [x] Caddyfile has `:80` block (local dev / fallback); deploy appends domain block for FQDN HTTPS
+- [x] Remove stale `{$DOMAIN}` from Caddyfile (Caddy v2 treats empty env var as global options block, causes error)
+- [x] Deploy script appends domain block with correct `/api/v1/` paths (idempotent — checks for existing block)
+- [x] Remove DOMAIN from docker-compose caddy environment (domain is hardcoded in Caddyfile appended block)
+- [x] All docs and deploy script updated to use port 80 and `/api/v1/` paths
+- [x] Single entry point: everything goes through Caddy on port 80/443
+- [x] End-to-end verified — all 9 endpoints pass through Caddy proxy
+- [x] deploy.sh now sources `.env` for DOMAIN/EMAIL — can set them in .env or pass via CLI (CLI overrides .env)

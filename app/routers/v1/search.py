@@ -1,4 +1,4 @@
-"""REST endpoint for full-text search: GET /search."""
+"""REST endpoint for full-text search: GET /api/v1/search."""
 
 from fastapi import APIRouter, Depends, Query
 
@@ -8,7 +8,7 @@ from app.repositories.cache_repository import CacheRepository
 from app.schemas.search import SearchResponse
 from app.services.search_service import SearchService
 
-router = APIRouter(prefix="/search", tags=["search"])
+router = APIRouter(tags=["search"])
 settings = Settings()
 
 

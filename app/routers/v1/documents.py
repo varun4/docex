@@ -1,4 +1,4 @@
-"""REST endpoints for document CRUD: POST/GET/DELETE /documents."""
+"""REST endpoints for document CRUD: POST/GET/DELETE /api/v1/documents."""
 
 from uuid import UUID
 
@@ -11,7 +11,7 @@ from app.repositories.cache_repository import CacheRepository
 from app.schemas.documents import DeleteResponse, DocumentCreate, DocumentResponse, IngestResponse
 from app.services.document_service import DocumentService
 
-router = APIRouter(prefix="/documents", tags=["documents"])
+router = APIRouter(tags=["documents"])
 settings = Settings()
 
 

@@ -287,7 +287,7 @@ async def post_to_api(docs: list[dict], api_url: str):
                 continue
             try:
                 resp = await client.post(
-                    f"{api_url}/documents",
+                    f"{api_url}/api/v1/documents",
                     headers={"X-Tenant-ID": TENANT, "Content-Type": "application/json"},
                     json=doc,
                 )
@@ -312,7 +312,7 @@ async def main():
     )
     parser.add_argument(
         "--api",
-        help="Base URL of the DocEx API (e.g. http://localhost:8000)",
+        help="Base URL of the DocEx API (e.g. http://localhost)",
     )
     parser.add_argument(
         "--delay",

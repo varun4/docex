@@ -183,7 +183,7 @@ async function ingest(e) {
   if (meta) {
     try { body.metadata = JSON.parse(meta); } catch { body.metadata = meta; }
   }
-  const resp = await api('POST', '/documents', body);
+  const resp = await api('POST', '/api/v1/documents', body);
   showResult('result-ingest', resp);
 }
 
@@ -192,7 +192,7 @@ async function search(e) {
   const q = encodeURIComponent($('search-query').value);
   const p = $('search-page').value;
   const s = $('search-size').value;
-  const resp = await api('GET', `/search?q=${q}&page=${p}&size=${s}`);
+  const resp = await api('GET', `/api/v1/search?q=${q}&page=${p}&size=${s}`);
   $('search-total').textContent = resp.data?.total ?? '?';
   showResult('result-search', resp);
   const details = $('result-search');
@@ -233,7 +233,7 @@ async function search(e) {
 async function getDoc(e) {
   if (e) e.preventDefault();
   const id = $('get-id').value;
-  const resp = await api('GET', `/documents/${id}`);
+  const resp = await api('GET', `/api/v1/documents/${id}`);
   const view = $('doc-view');
   const raw = $('resp-get');
   raw.className = resp.ok ? 'success' : 'error';

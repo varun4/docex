@@ -1,9 +1,9 @@
-"""Prometheus metrics endpoint: GET /metrics."""
+"""Prometheus metrics endpoint: GET /api/v1/metrics."""
 
 from fastapi import APIRouter
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
-router = APIRouter(prefix="/metrics", tags=["metrics"], include_in_schema=False)
+router = APIRouter(tags=["metrics"], include_in_schema=False)
 
 
 @router.get("")

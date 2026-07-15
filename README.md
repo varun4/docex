@@ -49,31 +49,31 @@ docker compose run app python scripts/seed.py --output data/seed.jsonl
 docker compose run app python scripts/bulk_import.py data/seed.jsonl --api http://app:8000 --tenant stardewvalley
 ```
 
-The API is available at `http://localhost:8000` (or `https://your.domain` with `--domain`). Documents are ingested asynchronously — `POST /documents` returns immediately with an `event_id`, and the consumer process indexes into Elasticsearch in the background.
+The API is available at `http://localhost` (or `https://your.domain` with `--domain`). Documents are ingested asynchronously — `POST /api/v1/documents` returns immediately with an `event_id`, and the consumer process indexes into Elasticsearch in the background.
 
 ## Usage
 
 ```bash
 # Index a document (async — returns 202 with event_id)
-curl -X POST "http://localhost:8000/documents" \
+curl -X POST "http://localhost/api/v1/documents" \
   -H "X-Tenant-ID: stardewvalley" \
   -H "Content-Type: application/json" \
   -d '{"title": "Stardrop", "content": "A rare fruit that empowers those who eat it."}'
 
 # Search documents
-curl "http://localhost:8000/search?q=stardrop&page=1&size=10" \
+curl "http://localhost/api/v1/search?q=stardrop&page=1&size=10" \
   -H "X-Tenant-ID: stardewvalley"
 
 # Get document by ID
-curl "http://localhost:8000/documents/<id>" \
+curl "http://localhost/api/v1/documents/<id>" \
   -H "X-Tenant-ID: stardewvalley"
 
 # Delete document
-curl -X DELETE "http://localhost:8000/documents/<id>" \
+curl -X DELETE "http://localhost/api/v1/documents/<id>" \
   -H "X-Tenant-ID: stardewvalley"
 
 # Health check
-curl http://localhost:8000/health
+curl http://localhost/api/v1/health
 ```
 
 ## Scripts
@@ -117,11 +117,11 @@ docex/
 ## API Endpoints
 
 | Method | Path | Auth | Response | Description |
-|---|---|---|---|---|
-| POST | `/documents` | `X-Tenant-ID` | `202 {id, event_id, status: "pending"}` | Async document ingest |
-| GET | `/search?q=&page=&size=` | `X-Tenant-ID` | `200 {results[], total, page, size}` | Full-text search via Elasticsearch |
-| GET | `/documents/{id}` | `X-Tenant-ID` | `200` document / `404` | Retrieve document from ES |
-| DELETE | `/documents/{id}` | `X-Tenant-ID` | `200` / `404` | Delete document from ES |
+|---|---|---|---|---|---|
+| POST | `/api/v1/documents` | `X-Tenant-ID` | `202 {id, event_id, status: "pending"}` | Async document ingest |
+| GET | `/api/v1/search?q=&page=&size=` | `X-Tenant-ID` | `200 {results[], total, page, size}` | Full-text search via Elasticsearch |
+| GET | `/api/v1/documents/{id}` | `X-Tenant-ID` | `200` document / `404` | Retrieve document from ES |
+| DELETE | `/api/v1/documents/{id}` | `X-Tenant-ID` | `200` / `404` | Delete document from ES |
 | GET | `/health` | — | `200` / `503` | Health check (PG, Redis, ES, Kafka) |
 
 ## Architecture
@@ -186,14 +186,14 @@ graph TB
 
 ### Ingest Flow (async)
 ```
-POST /documents ──▶ PG Outbox ──▶ Kafka ──▶ Consumer ──▶ Elasticsearch
+POST /api/v1/documents ──▶ PG Outbox ──▶ Kafka ──▶ Consumer ──▶ Elasticsearch
                                                │
                                                └──▶ Redis (cache warm + invalidate)
 ```
 
 ### Search Flow (cache-aside)
 ```
-GET /search ──▶ Redis (check cache)
+GET /api/v1/search ──▶ Redis (check cache)
                   ├── HIT  ──▶ return cached
                   └── MISS ──▶ Elasticsearch (multi_match, title^2 + keyword^3)
                                └──▶ cache result in Redis ──▶ return

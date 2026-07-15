@@ -1,4 +1,4 @@
-"""REST endpoint for health check: GET /health."""
+"""REST endpoint for health check: GET /api/v1/health."""
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -8,7 +8,7 @@ from app.repositories.cache_repository import CacheRepository
 from app.schemas.health import HealthResponse
 from app.services.health_service import HealthService
 
-router = APIRouter(prefix="/health", tags=["health"])
+router = APIRouter(tags=["health"])
 
 
 def get_health_service(

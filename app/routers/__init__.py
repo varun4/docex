@@ -1,1 +1,1 @@
-"""API route handlers for document, search, health, and metrics endpoints."""
+"""API route handler packages — versioned subdirectories (v1/, v2/, ...)."""

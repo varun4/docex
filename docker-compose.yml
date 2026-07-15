@@ -71,8 +71,6 @@ services:
       # network: host is required for WSL DNS resolution during pip install.
       # Harmless on native Linux (Oracle, Ubuntu) — can be safely removed there.
       network: host
-    ports:
-      - "8000:8000"
     environment:
       PYTHONPATH: /app
       DATABASE_URL: postgresql://docsextract:${PG_PASSWORD:-docsextract}@postgres:5432/docex
@@ -118,15 +116,13 @@ services:
   caddy:
     image: caddy:2-alpine
     ports:
-      - "${CADDY_HTTP_PORT:-8080}:80"
-      - "${CADDY_HTTPS_PORT:-8443}:443"
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./ui.html:/usr/share/caddy/index.html
       - caddy_data:/data
       - caddy_config:/config
-    environment:
-      - DOMAIN=${DOMAIN:-}
     depends_on:
       - app
     restart: unless-stopped

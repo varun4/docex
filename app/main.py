@@ -112,11 +112,11 @@ def create_app() -> FastAPI:
             },
         )
 
-    from app.routers import documents, health, metrics, search
-    app.include_router(documents.router)
-    app.include_router(search.router)
-    app.include_router(health.router)
-    app.include_router(metrics.router)
+    from app.routers.v1 import documents, health, metrics, search
+    app.include_router(documents.router, prefix="/api/v1/documents")
+    app.include_router(search.router, prefix="/api/v1/search")
+    app.include_router(health.router, prefix="/api/v1/health")
+    app.include_router(metrics.router, prefix="/api/v1/metrics")
 
     return app
 

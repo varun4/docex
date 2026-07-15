@@ -32,10 +32,10 @@
 
 | Method | Endpoint | Auth Header | Request Body | Response |
 |--------|----------|-------------|--------------|----------|
-| POST | `/documents` | `X-Tenant-ID` | `{title, content, metadata?}` | `202 {id, event_id, status: "pending"}` |
-| GET | `/search?q={query}&page=1&size=20` | `X-Tenant-ID` | — | `{results[], total, page, size}` |
-| GET | `/documents/{id}` | `X-Tenant-ID` | — | `{id, title, content, metadata, created_at, updated_at}` |
-| DELETE | `/documents/{id}` | `X-Tenant-ID` | — | `{status}` |
+| POST | `/api/v1/documents` | `X-Tenant-ID` | `{title, content, metadata?}` | `202 {id, event_id, status: "pending"}` |
+| GET | `/api/v1/search?q={query}&page=1&size=20` | `X-Tenant-ID` | — | `{results[], total, page, size}` |
+| GET | `/api/v1/documents/{id}` | `X-Tenant-ID` | — | `{id, title, content, metadata, created_at, updated_at}` |
+| DELETE | `/api/v1/documents/{id}` | `X-Tenant-ID` | — | `{status}` |
 | GET | `/health` | — | — | `{status, version, dependencies}` |
 
 ### Document Schema (Request/Response)

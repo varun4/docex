@@ -28,7 +28,7 @@ async def post_with_retry(client: httpx.AsyncClient, url: str, doc: dict, tenant
 
     Args:
         client: The async HTTP client.
-        url: Full API URL for POST /documents.
+        url: Full API URL for POST /api/v1/documents.
         doc: Document payload dict.
         tenant: Tenant ID for the X-Tenant-ID header.
 
@@ -82,7 +82,7 @@ async def import_via_api(docs: list[dict], api_url: str, tenant: str, batch: int
             chunk_start = time.monotonic()
             chunk = docs[i : i + batch]
             tasks = [
-                post_with_retry(client, f"{api_url}/documents", doc, tenant)
+                post_with_retry(client, f"{api_url}/api/v1/documents", doc, tenant)
                 for doc in chunk
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -111,7 +111,7 @@ async def main():
     """Load documents from a JSONL file and import them into the DocEx API."""
     parser = argparse.ArgumentParser(description="Bulk-import seed data into DocEx")
     parser.add_argument("input", help="Path to JSONL file")
-    parser.add_argument("--api", default="http://localhost:8000", help="API base URL")
+    parser.add_argument("--api", default="http://localhost", help="API base URL")
     parser.add_argument("--tenant", default="stardewvalley", help="Tenant ID")
     parser.add_argument("--batch", type=int, default=BATCH_SIZE, help="Documents per batch")
     parser.add_argument("--rate", type=int, default=DEFAULT_RATE, help="Target max requests per second (default %d)" % DEFAULT_RATE)
