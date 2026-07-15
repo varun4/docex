@@ -1,6 +1,5 @@
 """Indexes a Kafka document event into Elasticsearch, warms Redis cache, and updates outbox status."""
 
-import json
 import logging
 
 import asyncpg
@@ -8,9 +7,11 @@ import redis.asyncio as aioredis
 from elasticsearch import AsyncElasticsearch
 
 from app.config import Settings
-from app.enums import EventStatus
+from app.enums import EventStatus, EventType
+from app.repositories.document_repository import DocumentRepository
 from app.repositories.hash_utils import compute_content_hash
 from app.schemas.documents import DocumentResponse
+from app.schemas.events import DocumentEvent
 from app.repositories.outbox_repository import OutboxRepository
 
 log = logging.getLogger("consumer.indexer")
@@ -36,69 +37,81 @@ class Indexer:
         self.redis = redis
         self.pg_pool = pg_pool
         self.outbox_repo = OutboxRepository()
+        self.doc_repo = DocumentRepository(es)
 
     async def process_event(self, event_data: dict):
         """Process a single document event from Kafka.
 
-        For 'delete' events, removes the document from ES.
-        For all other events, indexes into ES, warms the doc cache,
-        invalidates the tenant's search cache, and marks the outbox
-        event as EventStatus.COMPLETED. On failure, marks as EventStatus.FAILED.
+        For EventType.DELETE, removes the document from ES.
+        For all other event types, computes content hash, checks ES for an
+        identical existing document (idempotency), and either:
+          - marks the event as 'duplicate' if content already exists, or
+          - indexes into ES, warms the doc cache, invalidates the
+            tenant's search cache, and marks the event as 'completed'.
+        On failure, marks as EventStatus.FAILED.
 
         Args:
             event_data: Deserialized Kafka message payload as a dict.
         """
-        event_id = event_data.get("event_id")
-        event_type = event_data.get("event_type")
-        tenant_id = event_data.get("tenant_id")
-        doc_id = event_data.get("doc_id")
-        title = event_data.get("title")
-        content = event_data.get("content")
-        metadata = event_data.get("metadata", {})
+        event = DocumentEvent.model_validate(event_data)
 
         try:
-            timestamp = event_data.get("timestamp")
-
-            if event_type == "delete":
+            if event.event_type is EventType.DELETE:
                 await self.es.delete(
                     index=settings.es_index_name,
-                    id=doc_id,
+                    id=str(event.doc_id),
                     ignore=[404],
                 )
-            else:
-                content_hash = compute_content_hash(tenant_id, title, content)
-                body = {
-                    "doc_id": doc_id,
-                    "tenant_id": tenant_id,
-                    "content_hash": content_hash,
-                    "title": title,
-                    "content": content,
-                    "metadata": metadata,
-                    "created_at": timestamp,
-                    "updated_at": timestamp,
-                }
-                await self.es.index(
-                    index=settings.es_index_name,
-                    id=doc_id,
-                    body=body,
-                )
+
+                async with self.pg_pool.acquire() as conn:
+                    await self.outbox_repo.update_status(conn, event.event_id, EventStatus.COMPLETED)
+                log.info("Deleted doc %s (event %s)", event.doc_id, event.event_id)
+                return
+
+            content_hash = compute_content_hash(event.tenant_id, event.title, event.content)
+            existing = await self.doc_repo.find_by_hash(event.tenant_id, content_hash)
+
+            if existing:
+                async with self.pg_pool.acquire() as conn:
+                    await self.outbox_repo.update_status(
+                        conn, event.event_id, EventStatus.DUPLICATE,
+                        f"duplicate of existing document {existing.id}",
+                    )
+                log.info("Duplicate doc %s skipped (event %s)", event.doc_id, event.event_id)
+                return
+
+            body = {
+                "doc_id": str(event.doc_id),
+                "tenant_id": event.tenant_id,
+                "content_hash": content_hash,
+                "title": event.title,
+                "content": event.content,
+                "metadata": event.metadata,
+                "created_at": event.timestamp.isoformat(),
+                "updated_at": event.timestamp.isoformat(),
+            }
+            await self.es.index(
+                index=settings.es_index_name,
+                id=str(event.doc_id),
+                body=body,
+            )
 
             doc_response = DocumentResponse(
-                id=doc_id,
-                title=title,
-                content=content,
-                metadata=metadata,
-                created_at=timestamp,
-                updated_at=timestamp,
+                id=event.doc_id,
+                title=event.title,
+                content=event.content,
+                metadata=event.metadata,
+                created_at=event.timestamp,
+                updated_at=event.timestamp,
             )
             await self.redis.setex(
-                f"doc:{tenant_id}:{doc_id}",
+                f"doc:{event.tenant_id}:{event.doc_id}",
                 settings.cache_ttl_doc,
                 doc_response.model_dump_json(),
             )
 
             cursor = 0
-            pattern = f"search:{tenant_id}:*"
+            pattern = f"search:{event.tenant_id}:*"
             while True:
                 cursor, keys = await self.redis.scan(cursor, match=pattern, count=settings.cache_scan_count)
                 if keys:
@@ -107,11 +120,11 @@ class Indexer:
                     break
 
             async with self.pg_pool.acquire() as conn:
-                await self.outbox_repo.update_status(conn, event_id, EventStatus.COMPLETED.value)
+                await self.outbox_repo.update_status(conn, event.event_id, EventStatus.COMPLETED)
 
-            log.info("Processed event %s (%s) for doc %s", event_id, event_type, doc_id)
+            log.info("Processed event %s (%s) for doc %s", event.event_id, event.event_type.value, event.doc_id)
 
         except Exception as e:
-            log.error("Failed to process event %s: %s", event_id, e)
+            log.error("Failed to process event %s: %s", event.event_id, e)
             async with self.pg_pool.acquire() as conn:
-                await self.outbox_repo.update_status(conn, event_id, EventStatus.FAILED.value, str(e))
+                await self.outbox_repo.update_status(conn, event.event_id, EventStatus.FAILED, str(e))

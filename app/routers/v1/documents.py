@@ -3,7 +3,6 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 
 from app.config import Settings
 from app.dependencies import get_db_pool, get_elasticsearch, get_kafka_producer, get_redis, get_tenant_id, rate_limit
@@ -35,16 +34,11 @@ async def create_document(
 ):
     """Ingest a document asynchronously.
 
-    Returns 202 with event_id for tracking if new, or 200 with existing
-    document details if the same content already exists (idempotent).
+    Always returns 202 with event_id for tracking.  The consumer
+    handles hashing, idempotency, and indexing.  Poll
+    GET /events/{event_id} to check processing status.
     """
-    result = await svc.create(tenant_id, body.title, body.content, body.metadata)
-    if isinstance(result, DocumentResponse):
-        return JSONResponse(
-            status_code=200,
-            content=result.model_dump(mode="json"),
-        )
-    return result
+    return await svc.create(tenant_id, body.title, body.content, body.metadata)
 
 
 @router.get("/events/{event_id}", response_model=EventStatusResponse)

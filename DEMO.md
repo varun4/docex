@@ -75,17 +75,20 @@ Expected response (HTTP 202):
 }
 ```
 
-**What happens under the hood:**
+**What happens under the hood (no CPU-bound work in the API path):**
 
 ```
 POST /api/v1/documents
   ──▶ OutboxRepository: INSERTS event into PostgreSQL document_events table
   ──▶ KafkaProducer: publishes event to documents.ingest topic
-  ──▶ Response: 202 { id, event_id, status: "pending" }
+  ──▶ Response: 202 { id, event_id, status: "pending" }   ← fast, no hashing
          │
          ▼  (background, < 1s)
       Consumer polls Kafka
          │
+         ├──▶ compute hash → check ES for duplicate
+         │     ── duplicate? → mark event "duplicate", skip indexing
+         │     ── new?       → continue
          ├──▶ indexDocument: ES index with BM25 scoring
          ├──▶ cacheWarm: Redis SETEX doc:{tenant}:{id}
          ├──▶ invalidateSearchCache: Redis SCAN + DEL search:{tenant}:*
@@ -107,22 +110,31 @@ EVENT_ID=$(curl -s -X POST http://localhost/api/v1/documents \
 
 echo "Event ID: $EVENT_ID"
 
-# Poll until completed
+# Poll until terminal status
 while true; do
-  STATUS=$(curl -s "http://localhost/api/v1/documents/events/$EVENT_ID" \
-    -H "X-Tenant-ID: stardewvalley" | jq -r '.status')
-  echo "Status: $STATUS"
-  if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
-    break
-  fi
+  RESP=$(curl -s "http://localhost/api/v1/documents/events/$EVENT_ID" \
+    -H "X-Tenant-ID: stardewvalley")
+  STATUS=$(echo "$RESP" | jq -r '.status')
+  echo "$RESP" | jq
+  case "$STATUS" in
+    completed|failed|duplicate) break ;;
+  esac
   sleep 1
 done
 ```
 
-Expected poll sequence:
+Expected poll sequences:
+
+**New document** — consumer indexes it:
 ```json
-{ "event_id": "...", "status": "pending",  "error": null }   ← initial
-{ "event_id": "...", "status": "completed", "error": null }  ← after consumer processes
+{ "event_id": "...", "status": "pending",    "error": null }
+{ "event_id": "...", "status": "completed",  "error": null }
+```
+
+**Duplicate content** — consumer skips indexing:
+```json
+{ "event_id": "...", "status": "pending",      "error": null }
+{ "event_id": "...", "status": "duplicate",    "error": "duplicate of existing document <doc_id>" }
 ```
 
 If processing fails, `status` is `"failed"` and `error` contains the reason.

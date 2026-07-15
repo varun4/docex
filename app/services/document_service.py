@@ -8,13 +8,12 @@ from aiokafka import AIOKafkaProducer
 from elasticsearch import AsyncElasticsearch
 
 from app.config import Settings
-from app.enums import ErrorCode, EventStatus
+from app.enums import ErrorCode, EventStatus, EventType
 from app.exceptions import AppError
 from app.kafka.producer import publish_event
 from app.metrics import CACHE_OPS
 from app.repositories.cache_repository import CacheRepository
 from app.repositories.document_repository import DocumentRepository
-from app.repositories.hash_utils import compute_content_hash
 from app.repositories.outbox_repository import OutboxRepository
 from app.schemas.documents import DocumentResponse, IngestResponse
 from app.schemas.events import DocumentEvent, EventStatusResponse
@@ -57,13 +56,12 @@ class DocumentService:
         title: str,
         content: str,
         metadata: dict | None = None,
-    ) -> IngestResponse | DocumentResponse:
+    ) -> IngestResponse:
         """Create a document via async ingest pipeline.
 
-        Checks content hash for idempotency — if an identical document
-        already exists in ES, returns the existing document without
-        creating a new one.  Otherwise writes to the PG outbox, publishes
-        a Kafka event, and returns IngestResponse with status 'pending'.
+        Writes to the PG outbox, publishes a Kafka event, and returns
+        immediately with IngestResponse (status 'pending').  The consumer
+        handles hashing, idempotency, and indexing asynchronously.
 
         Args:
             tenant_id: Tenant namespace.
@@ -72,19 +70,13 @@ class DocumentService:
             metadata: Optional arbitrary JSON metadata.
 
         Returns:
-            DocumentResponse if the document already exists (idempotent),
-            otherwise IngestResponse with status 'pending'.
+            IngestResponse with status 'pending' and event_id for tracking.
         """
-        content_hash = compute_content_hash(tenant_id, title, content)
-        existing = await self.doc_repo.find_by_hash(tenant_id, content_hash)
-        if existing:
-            return existing
-
         doc_id = uuid.uuid4()
 
         async with self.db_pool.acquire() as conn:
             event = await self.outbox_repo.insert_event(
-                conn, tenant_id, title, content, metadata, doc_id, "create",
+                conn, tenant_id, title, content, metadata, doc_id, EventType.CREATE,
             )
 
         await publish_event(self.kafka_producer, settings.kafka_topic, event)

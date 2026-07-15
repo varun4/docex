@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import asyncpg
 
-from app.enums import EventStatus
+from app.enums import EventStatus, EventType
 from app.schemas.events import DocumentEvent
 
 
@@ -20,7 +20,7 @@ class OutboxRepository:
         content: str,
         metadata: dict | None = None,
         doc_id: uuid.UUID | None = None,
-        event_type: str = "create",
+        event_type: EventType = EventType.CREATE,
     ) -> DocumentEvent:
         """Insert a new event into the outbox table.
 
@@ -31,7 +31,7 @@ class OutboxRepository:
             content: Document body text.
             metadata: Optional JSON metadata.
             doc_id: Optional document UUID (generated if None).
-            event_type: Type of event (e.g. 'create', 'update', 'delete').
+            event_type: Type of event (CREATE, UPDATE, or DELETE).
 
         Returns:
             A DocumentEvent model with the persisted event data.
@@ -49,14 +49,14 @@ class OutboxRepository:
             title,
             content,
             json.dumps(metadata or {}),
-            event_type,
+            event_type.value,
         )
         data = dict(row)
         if isinstance(data.get("metadata"), str):
             data["metadata"] = json.loads(data["metadata"])
         return DocumentEvent(
             event_id=data["event_id"],
-            event_type=data["event_type"],
+            event_type=EventType(data["event_type"]),
             tenant_id=data["tenant_id"],
             doc_id=data["doc_id"],
             title=data["title"],
@@ -69,7 +69,7 @@ class OutboxRepository:
         self,
         conn: asyncpg.Connection,
         event_id: uuid.UUID,
-        status: str,
+        status: EventStatus,
         error: str | None = None,
     ):
         """Update the processing status of an outbox event.
@@ -87,7 +87,7 @@ class OutboxRepository:
             WHERE event_id = $1
             """,
             event_id,
-            status,
+            status.value,
             error,
         )
 

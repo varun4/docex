@@ -17,3 +17,11 @@ class EventStatus(str, Enum):
     PENDING = "pending"
     COMPLETED = "completed"
     FAILED = "failed"
+    DUPLICATE = "duplicate"
+
+
+class EventType(str, Enum):
+    """Types of document events published to Kafka / stored in outbox."""
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
